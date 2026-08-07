@@ -104,7 +104,27 @@ export async function getAvailableSlots(request: AvailabilityRequest): Promise<S
     [serviceId, businessId],
   );
   const eligibleResources = resourceRows.rows as unknown as Resource[];
-  // "if the set is empty -> [null] (service needs no resource)"
+
+  /**
+   * §4: "if the set is empty -> [null] (service needs no resource)".
+   *
+   * But "empty" has two very different causes, and conflating them is a
+   * serious bug. The query above filters on r.active, so a service that DOES
+   * require a room comes back empty once every room is out of service — and
+   * treating that as "needs no resource" would book unlimited concurrent
+   * massages with resource_id NULL, which never conflicts. §3's rule is about
+   * services with no service_resources ROWS, not about a set emptied by
+   * filtering.
+   */
+  const requiresResource = await conn.query(
+    'select 1 from service_resources where service_id = $1 limit 1',
+    [serviceId],
+  );
+
+  if (requiresResource.rows.length > 0 && eligibleResources.length === 0) {
+    return []; // needs a room, and every one of them is inactive
+  }
+
   const resourceCandidates: (string | null)[] =
     eligibleResources.length === 0 ? [null] : eligibleResources.map((r) => r.id);
 
