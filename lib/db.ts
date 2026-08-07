@@ -60,7 +60,10 @@ export function getPool(): Pool {
   return globalForPool.__spaPool;
 }
 
-export async function query<T extends Record<string, unknown> = Record<string, unknown>>(
+// Not constrained to Record<string, unknown>: a TypeScript interface has no
+// implicit index signature, so that constraint would reject every domain type
+// in lib/types.ts and push us into declaring index signatures we do not want.
+export async function query<T = Record<string, unknown>>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
@@ -68,7 +71,7 @@ export async function query<T extends Record<string, unknown> = Record<string, u
   return result.rows as T[];
 }
 
-export async function queryOne<T extends Record<string, unknown> = Record<string, unknown>>(
+export async function queryOne<T = Record<string, unknown>>(
   text: string,
   params: unknown[] = [],
 ): Promise<T | null> {

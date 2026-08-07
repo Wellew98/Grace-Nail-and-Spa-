@@ -16,14 +16,15 @@
 
 -- ---------- business ----------
 -- NAP PLACEHOLDER. Spec §8 Phase 1 requires name/address/phone to match the
--- Google Business Profile byte for byte. Replace the four values below with
--- the exact GBP strings — this row and app/config/business.ts are the only
--- two places NAP appears.
+-- Google Business Profile byte for byte. Replace the marked values below with
+-- the exact GBP strings. This row is the ONLY place NAP lives — the footer,
+-- the contact page and the LocalBusiness JSON-LD all render from it, so there
+-- is nothing else to keep in step.
 insert into businesses (
   id, name, slug, phone, whatsapp, email, address, google_maps_url,
   timezone, min_notice_minutes, max_advance_days
 ) values (
-  '00000000-0000-0000-0000-0000000000b1',
+  '00000000-0000-4000-8000-0000000000b1',
   'Grace Nail and Spa',
   'grace-nail-and-spa',
   '+27821234567',                       -- REPLACE with GBP phone
@@ -38,23 +39,23 @@ insert into businesses (
 
 -- ---------- services (§10) ----------
 insert into services (id, business_id, name, description, duration_minutes, turnaround_minutes, price_cents, sort_order) values
-  ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-0000000000b1',
+  ('00000000-0000-4000-8000-000000000051', '00000000-0000-4000-8000-0000000000b1',
    'Full Body Massage',
    'A full-body Swedish massage to release tension from head to toe.',
    60, 15, 50000, 1),
-  ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-0000000000b1',
+  ('00000000-0000-4000-8000-000000000052', '00000000-0000-4000-8000-0000000000b1',
    'Back & Neck Massage',
    'Focused pressure work on the back, shoulders and neck.',
    30, 10, 28000, 2),
-  ('00000000-0000-0000-0000-000000000053', '00000000-0000-0000-0000-0000000000b1',
+  ('00000000-0000-4000-8000-000000000053', '00000000-0000-4000-8000-0000000000b1',
    'Classic Facial',
    'Cleanse, exfoliate, steam and mask, finished with a moisturiser for your skin type.',
    45, 10, 35000, 3),
-  ('00000000-0000-0000-0000-000000000054', '00000000-0000-0000-0000-0000000000b1',
+  ('00000000-0000-4000-8000-000000000054', '00000000-0000-4000-8000-0000000000b1',
    'Gel Manicure',
    'Shaping, cuticle work and a long-wear gel colour of your choice.',
    45, 5, 25000, 4),
-  ('00000000-0000-0000-0000-000000000055', '00000000-0000-0000-0000-0000000000b1',
+  ('00000000-0000-4000-8000-000000000055', '00000000-0000-4000-8000-0000000000b1',
    'Pedicure',
    'A soak, scrub and nail tidy, finished with polish.',
    60, 10, 32000, 5)
@@ -62,16 +63,16 @@ on conflict (id) do nothing;
 
 -- ---------- staff (§10: three therapists) ----------
 insert into staff (id, business_id, name, active) values
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-0000000000b1', 'Sarah',  true),
-  ('00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-0000000000b1', 'Nomsa',  true),
-  ('00000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-0000000000b1', 'Lerato', true)
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-0000000000b1', 'Sarah',  true),
+  ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-0000000000b1', 'Nomsa',  true),
+  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-0000000000b1', 'Lerato', true)
 on conflict (id) do nothing;
 
 -- ---------- resources (§10) ----------
 insert into resources (id, business_id, name, active) values
-  ('00000000-0000-0000-0000-000000000031', '00000000-0000-0000-0000-0000000000b1', 'Massage Room 1', true),
-  ('00000000-0000-0000-0000-000000000032', '00000000-0000-0000-0000-0000000000b1', 'Massage Room 2', true),
-  ('00000000-0000-0000-0000-000000000033', '00000000-0000-0000-0000-0000000000b1', 'Pedicure Chair', true)
+  ('00000000-0000-4000-8000-000000000031', '00000000-0000-4000-8000-0000000000b1', 'Massage Room 1', true),
+  ('00000000-0000-4000-8000-000000000032', '00000000-0000-4000-8000-0000000000b1', 'Massage Room 2', true),
+  ('00000000-0000-4000-8000-000000000033', '00000000-0000-4000-8000-0000000000b1', 'Pedicure Chair', true)
 on conflict (id) do nothing;
 
 -- ---------- which resources each service needs (§10) ----------
@@ -80,11 +81,11 @@ on conflict (id) do nothing;
 -- Either massage room satisfies a massage — that is the "any one of them"
 -- semantics of service_resources.
 insert into service_resources (service_id, resource_id) values
-  ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-000000000031'),
-  ('00000000-0000-0000-0000-000000000051', '00000000-0000-0000-0000-000000000032'),
-  ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-000000000031'),
-  ('00000000-0000-0000-0000-000000000052', '00000000-0000-0000-0000-000000000032'),
-  ('00000000-0000-0000-0000-000000000055', '00000000-0000-0000-0000-000000000033')
+  ('00000000-0000-4000-8000-000000000051', '00000000-0000-4000-8000-000000000031'),
+  ('00000000-0000-4000-8000-000000000051', '00000000-0000-4000-8000-000000000032'),
+  ('00000000-0000-4000-8000-000000000052', '00000000-0000-4000-8000-000000000031'),
+  ('00000000-0000-4000-8000-000000000052', '00000000-0000-4000-8000-000000000032'),
+  ('00000000-0000-4000-8000-000000000055', '00000000-0000-4000-8000-000000000033')
 on conflict do nothing;
 -- Gel Manicure (…54) intentionally has no rows: it requires no resource.
 -- Classic Facial (…53) likewise. §10 assigns rooms only to "massage services";
@@ -96,21 +97,21 @@ on conflict do nothing;
 -- acceptance test 4 work against the seed as-is.
 insert into staff_services (staff_id, service_id) values
   -- Sarah: everything, including the facial
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000051'),
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000052'),
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000053'),
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000054'),
-  ('00000000-0000-0000-0000-000000000021', '00000000-0000-0000-0000-000000000055'),
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-000000000051'),
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-000000000052'),
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-000000000053'),
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-000000000054'),
+  ('00000000-0000-4000-8000-000000000021', '00000000-0000-4000-8000-000000000055'),
   -- Nomsa: everything except the facial
-  ('00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000051'),
-  ('00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000052'),
-  ('00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000054'),
-  ('00000000-0000-0000-0000-000000000022', '00000000-0000-0000-0000-000000000055'),
+  ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-000000000051'),
+  ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-000000000052'),
+  ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-000000000054'),
+  ('00000000-0000-4000-8000-000000000022', '00000000-0000-4000-8000-000000000055'),
   -- Lerato: everything except the facial
-  ('00000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-000000000051'),
-  ('00000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-000000000052'),
-  ('00000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-000000000054'),
-  ('00000000-0000-0000-0000-000000000023', '00000000-0000-0000-0000-000000000055')
+  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-000000000051'),
+  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-000000000052'),
+  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-000000000054'),
+  ('00000000-0000-4000-8000-000000000023', '00000000-0000-4000-8000-000000000055')
 on conflict do nothing;
 
 -- ---------- working hours (§10) ----------
@@ -121,7 +122,7 @@ insert into working_hours (staff_id, day_of_week, start_time, end_time)
 select s.id, d.dow, '09:00'::time, '17:00'::time
 from staff s
 cross join (values (2), (3), (4), (5)) as d(dow)
-where s.business_id = '00000000-0000-0000-0000-0000000000b1'
+where s.business_id = '00000000-0000-4000-8000-0000000000b1'
   and not exists (
     select 1 from working_hours wh
     where wh.staff_id = s.id and wh.day_of_week = d.dow
@@ -130,7 +131,7 @@ where s.business_id = '00000000-0000-0000-0000-0000000000b1'
 insert into working_hours (staff_id, day_of_week, start_time, end_time)
 select s.id, 6, '09:00'::time, '14:00'::time
 from staff s
-where s.business_id = '00000000-0000-0000-0000-0000000000b1'
+where s.business_id = '00000000-0000-4000-8000-0000000000b1'
   and not exists (
     select 1 from working_hours wh
     where wh.staff_id = s.id and wh.day_of_week = 6
@@ -141,7 +142,7 @@ where s.business_id = '00000000-0000-0000-0000-0000000000b1'
 -- then link that user to this business so the §7 policies grant admin access:
 --
 --   insert into business_members (user_id, business_id)
---   values ('<auth-user-uuid>', '00000000-0000-0000-0000-0000000000b1');
+--   values ('<auth-user-uuid>', '00000000-0000-4000-8000-0000000000b1');
 --
 -- Until that row exists, a logged-in user sees nothing. That is the policy
 -- doing its job, not a bug.

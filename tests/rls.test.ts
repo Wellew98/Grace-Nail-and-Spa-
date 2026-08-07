@@ -131,8 +131,8 @@ describe('§9.8 RLS — the anon key', () => {
 });
 
 describe('§9.8 RLS — the authenticated owner', () => {
-  const OWNER = '00000000-0000-0000-0000-00000000a001';
-  const OUTSIDER = '00000000-0000-0000-0000-00000000a002';
+  const OWNER = '00000000-0000-4000-8000-00000000a001';
+  const OUTSIDER = '00000000-0000-4000-8000-00000000a002';
 
   it('sees nothing until a membership row links them to a business', async () => {
     await seedOneBooking();
@@ -153,7 +153,7 @@ describe('§9.8 RLS — the authenticated owner', () => {
     await query('insert into business_members (user_id, business_id) values ($1,$2)', [OWNER, IDS.business]);
 
     // A second spa with its own booking.
-    const other = '00000000-0000-0000-0000-0000000000b2';
+    const other = '00000000-0000-4000-8000-0000000000b2';
     await query(
       `insert into businesses (id, name, slug, phone) values ($1, 'Rival Spa', 'rival-spa', '+27820000000')`,
       [other],
@@ -171,7 +171,7 @@ describe('§9.8 RLS — the authenticated owner', () => {
   });
 
   it('cannot write a row into another business', async () => {
-    const other = '00000000-0000-0000-0000-0000000000b2';
+    const other = '00000000-0000-4000-8000-0000000000b2';
     await query(
       `insert into businesses (id, name, slug, phone) values ($1, 'Rival Spa', 'rival-spa', '+27820000000')`,
       [other],

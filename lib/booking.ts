@@ -111,6 +111,38 @@ class SlotUnavailable extends Error {
 }
 
 /**
+ * Serialise appointment writes for one business, for the life of the
+ * transaction. MUST be the first statement after BEGIN.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY: `appointments` carries two exclusion constraints. Two concurrent
+ * inserts can each pass one constraint and then block on the other's
+ * uncommitted index entry, in opposite orders — a genuine deadlock, even
+ * though neither row is invalid. Postgres resolves it, but only after waiting
+ * a full `deadlock_timeout` (1s by default) before it even looks for a cycle.
+ * Under real contention those one-second penalties compound badly: a burst of
+ * twenty racers on one slot took over a minute, versus a few milliseconds
+ * uncontended.
+ *
+ * Taking a single lock per business up front gives every writer the same
+ * ordering, so the cycle cannot form and nobody pays the deadlock timeout.
+ * The lock is released automatically on commit or rollback.
+ *
+ * WHAT THIS IS NOT: it is not the thing that prevents double booking. The
+ * exclusion constraints still are, and they still reject overlaps if this lock
+ * were removed tomorrow. This only removes lock-order nondeterminism.
+ *
+ * COST: appointment inserts for one business serialise. The insert is
+ * sub-millisecond and this is a single-salon product, so the ceiling is orders
+ * of magnitude above real demand. Determinism is worth far more here than
+ * theoretical write throughput.
+ * ---------------------------------------------------------------------------
+ */
+async function lockBusinessForWrite(client: Queryable, businessId: string): Promise<void> {
+  await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [businessId]);
+}
+
+/**
  * Resolve a slot for an owner-entered booking (walk-in or admin move).
  *
  * The owner books people standing at the counter, so working hours and minimum
@@ -214,6 +246,8 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
   const occupancyMinutes = service.duration_minutes + service.turnaround_minutes;
 
   // ---- idempotency fast path (§5: "Mobile users double-tap. Handle it.") ----
+  // Cheap check for the common case: the repeat arrives after the original
+  // finished. The authoritative check is inside the transaction below.
   if (idempotencyKey) {
     const existing = await queryOne<Appointment>(
       'select * from appointments where business_id = $1 and idempotency_key = $2',
@@ -225,9 +259,32 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
   // Captured out here so the catch block can describe what we tried to book
   // after the transaction has rolled back.
   let attempted: Slot | null = null;
+  let replayed = false;
 
   try {
     const appointment = await withTransaction(async (client) => {
+      // Before anything else. Also means the §4 re-check below runs inside the
+      // critical section, so step 2 is exact rather than advisory here.
+      await lockBusinessForWrite(client, businessId);
+
+      // ---- idempotency, authoritatively ----
+      // A true double-tap has both requests in flight at once, so neither sees
+      // the other on the fast path above. Whichever wins the lock inserts; the
+      // other arrives here and MUST return that same appointment. Checking
+      // after the lock (and before availability) is what makes that work — by
+      // this point the winner has committed, so an availability check would
+      // otherwise report the customer's own booking as "slot taken".
+      if (idempotencyKey) {
+        const existing = await client.query(
+          'select * from appointments where business_id = $1 and idempotency_key = $2',
+          [businessId, idempotencyKey],
+        );
+        if (existing.rows.length > 0) {
+          replayed = true;
+          return existing.rows[0] as unknown as Appointment;
+        }
+      }
+
       // ---- steps 2 + 3: re-run §4 for this exact slot, resolve staff/resource ----
       const resolved = ownerEntered
         ? await resolveSlotForOwner(client, businessId, serviceId, staffId!, startsAt, occupancyMinutes)
@@ -294,7 +351,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
       return row;
     });
 
-    return { ok: true, appointment, replayed: false };
+    return { ok: true, appointment, replayed };
   } catch (error) {
     // ---- step 8: the constraint refused the overlap ----
     if (isExclusionViolation(error) || error instanceof SlotUnavailable) {
@@ -463,6 +520,8 @@ export async function rescheduleBooking(options: {
 
   try {
     const result = await withTransaction(async (client) => {
+      await lockBusinessForWrite(client, original.business_id);
+
       // (1) Free the old row first — see the note above.
       await client.query(
         `update appointments
