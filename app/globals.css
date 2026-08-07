@@ -1,0 +1,49 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-display), ui-serif, Georgia, serif;
+
+  /* Warm, low-chroma spa palette. Deliberately not default Tailwind blue/gray. */
+  --color-sand-50: oklch(0.985 0.006 85);
+  --color-sand-100: oklch(0.965 0.012 84);
+  --color-sand-200: oklch(0.925 0.02 83);
+  --color-sand-300: oklch(0.865 0.028 82);
+  --color-sand-400: oklch(0.76 0.034 80);
+
+  --color-clay-500: oklch(0.62 0.055 55);
+  --color-clay-600: oklch(0.52 0.06 50);
+  --color-clay-700: oklch(0.42 0.055 48);
+  --color-clay-900: oklch(0.26 0.035 45);
+
+  --color-fern-500: oklch(0.58 0.07 155);
+  --color-fern-600: oklch(0.48 0.07 155);
+  --color-fern-700: oklch(0.38 0.06 155);
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-sand-50);
+  color: var(--color-clay-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Respect users who ask for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
