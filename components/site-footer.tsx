@@ -98,9 +98,24 @@ export function SiteFooter({
       </div>
 
       <div className="border-t border-gilt-200/60">
-        <p className="mx-auto max-w-5xl px-5 py-5 text-xs text-mauve-400">
-          © {new Date().getFullYear()} {business.name}
-        </p>
+        <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-5">
+          <p className="text-xs text-mauve-400">
+            © {new Date().getFullYear()} {business.name}
+          </p>
+          {/*
+            The only way in to the diary. The admin is deliberately not in the
+            main navigation — customers have no use for it — but with no link
+            anywhere the owner has to be told a URL and remember it, which is
+            how a booking system quietly goes unused. Discreet, not hidden.
+            The page itself is auth-gated, so linking it gives nothing away.
+          */}
+          <Link
+            href="/admin"
+            className="ml-auto text-xs text-mauve-400 underline-offset-4 hover:text-aubergine-900 hover:underline"
+          >
+            Staff login
+          </Link>
+        </div>
       </div>
     </footer>
   );
