@@ -34,6 +34,21 @@ const plexMono = IBM_Plex_Mono({
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
+/**
+ * Marketing pages are prerendered, then refreshed every five minutes.
+ *
+ * Fully static would be fastest, but the treatment list, prices, opening hours
+ * and the sample-menu banner all come from the database — and the owner edits
+ * those in Admin > Setup. Without revalidation her changes would sit invisible
+ * until someone redeployed, which is a confusing way for a price change to
+ * behave. Five minutes keeps the pages effectively static for the §8 "loads in
+ * under 2s" target while making edits show up on their own.
+ *
+ * /book and /b/[token] set `dynamic = 'force-dynamic'` themselves: availability
+ * must never be served from a cache.
+ */
+export const revalidate = 300;
+
 export async function generateMetadata(): Promise<Metadata> {
   const business = await getBusiness();
   const name = business?.name ?? 'Grace Nails and Beauty Spa';

@@ -119,6 +119,36 @@ business. If the owner confirms details like those, add them.
 
 ---
 
+## Deploying the site to Vercel
+
+The database already deploys itself (below). This is the web app.
+
+1. **vercel.com → Add New → Project → Import** `Wellew98/Grace-Nail-and-Spa-`.
+2. Framework is detected as Next.js. Leave the build settings alone.
+3. Set **Production Branch** to `claude/project-doc-8cv2my` under
+   *Settings → Git*, or Vercel will look for `main` and find nothing.
+4. Add these environment variables:
+
+| Variable | Value |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | the `sb_publishable_…` key |
+| `SUPABASE_DB_URL` | Supabase → Connect → **Transaction pooler**, port 6543 |
+| `NEXT_PUBLIC_SITE_URL` | your Vercel URL, e.g. `https://grace-nails.vercel.app` |
+
+Use the **pooler** connection string, not the direct one. Each serverless
+instance opens its own pool and instances scale out with traffic, so direct
+connections exhaust Postgres' limit under exactly the load you wanted to handle.
+The pool caps itself at 2 per instance when `VERCEL` is set, and the booking
+lock is transaction-scoped so it works through a transaction-mode pooler.
+
+`NEXT_PUBLIC_SITE_URL` matters more than it looks: the manage links in
+confirmation emails and the JSON-LD `url` are built from it. Left at localhost,
+customers get links to their own machine.
+
+Redeploy after adding variables — Next.js inlines `NEXT_PUBLIC_*` at build time,
+so they do not take effect on an existing build.
+
 ## Deploying via the Supabase GitHub integration
 
 The project is connected to this repo, so **merging into the production branch applies
@@ -185,15 +215,31 @@ refuses `--with-sample-data` outright. To target a database explicitly:
 npm run db:migrate -- "postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres"
 ```
 
-Create the owner in Supabase → Authentication → Add user, then link her to the business:
+### Creating the owner account
 
-```sql
-insert into business_members (user_id, business_id)
-values ('<auth-user-uuid>', '00000000-0000-4000-8000-0000000000b1');
-```
+The admin has no sign-up screen by design (§7: "single owner account to start"), so the owner
+is created by hand, once.
 
-Until that row exists a signed-in user sees nothing. That is the RLS policy working, not a
-bug.
+1. **Supabase → Authentication → Users → Add user → Create new user.**
+   Enter her email and a password, and tick **Auto Confirm User** — without it she cannot sign
+   in until she clicks a confirmation email.
+2. **Copy the new user's UID** from the users list.
+3. **Supabase → SQL Editor**, and run, with that UID pasted in:
+
+   ```sql
+   insert into business_members (user_id, business_id)
+   values ('<paste-the-uid-here>', '00000000-0000-4000-8000-0000000000b1')
+   on conflict do nothing;
+   ```
+
+4. **Sign in** at `/admin/login`. Today should render with the day's diary.
+
+Until step 3 exists she can sign in but sees nothing at all — `getOwnerSession()` finds no
+membership row and redirects her back to the login screen. That is the RLS policy working, not
+a bug, and it is the single most likely thing to go wrong on first setup.
+
+The SQL editor runs as a privileged role, so the insert is not blocked by the policy that
+would stop her writing that row herself.
 
 ### Environment
 

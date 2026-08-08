@@ -46,15 +46,44 @@ function connectionString(): string {
 // Next.js reloads modules in dev; without this every save leaks a pool.
 const globalForPool = globalThis as unknown as { __spaPool?: Pool };
 
+/**
+ * How many connections one pool may hold.
+ *
+ * On a long-running server, one process serves every request and a pool of ~10
+ * is right. On Vercel each serverless instance gets its OWN pool, and instances
+ * scale out with traffic — 10 apiece exhausts Postgres' connection limit fast,
+ * and the symptom is "too many clients already" under exactly the load you most
+ * wanted to handle. Small pools per instance, with Supabase's pooler in front,
+ * is the shape that survives.
+ *
+ * The advisory lock in lib/booking.ts is `pg_advisory_xact_lock`, transaction
+ * scoped rather than session scoped, so it is safe through a transaction-mode
+ * pooler. A session-scoped lock would not be.
+ */
+function poolSize(): number {
+  const explicit = process.env.PGPOOL_MAX;
+  if (explicit) return Number(explicit);
+  return process.env.VERCEL ? 2 : 10;
+}
+
 export function getPool(): Pool {
   if (!globalForPool.__spaPool) {
     const url = connectionString();
     globalForPool.__spaPool = new Pool({
       connectionString: url,
-      max: Number(process.env.PGPOOL_MAX ?? 10),
-      idleTimeoutMillis: 30_000,
+      max: poolSize(),
+      // Serverless instances are frozen between requests; a long idle timeout
+      // holds connections that nobody is using.
+      idleTimeoutMillis: process.env.VERCEL ? 10_000 : 30_000,
+      connectionTimeoutMillis: 15_000,
       // Supabase requires TLS; a local socket/localhost test database does not.
       ssl: /supabase|amazonaws/i.test(url) ? { rejectUnauthorized: false } : undefined,
+    });
+
+    // A pool error with no listener takes the process down. Log and let the
+    // pool discard the connection instead.
+    globalForPool.__spaPool.on('error', (error) => {
+      console.error('[db] idle client error', error);
     });
   }
   return globalForPool.__spaPool;
