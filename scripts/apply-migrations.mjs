@@ -17,14 +17,26 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { Client } from 'pg';
 
-const FILES = [
+/**
+ * Applied always. These are the same files Supabase's GitHub integration
+ * applies on merge to the production branch, so running this script and merging
+ * produce the same database.
+ */
+const MIGRATIONS = [
   'supabase/migrations/0001_init.sql',
   'supabase/migrations/0002_rls.sql',
-  'supabase/seed.sql',
-  // Real opening hours, layered over spec §10's fixture hours. Pass
-  // --spec-hours to stop before this and keep the fixture (what the tests use).
-  'supabase/seed-production.sql',
+  'supabase/migrations/0003_business.sql',
 ];
+
+/**
+ * Applied ONLY with --with-sample-data.
+ *
+ * These are spec §10's example therapists and treatments. They are invented,
+ * and they must never reach a database real customers can see — that is why
+ * they are opt-in rather than default, and why the script refuses the flag
+ * against a hosted project.
+ */
+const SAMPLE_DATA = ['supabase/seed.sql', 'supabase/seed-real-hours.sql'];
 
 function loadEnvLocal() {
   if (!existsSync('.env.local')) return;
@@ -39,7 +51,7 @@ function loadEnvLocal() {
 loadEnvLocal();
 
 const args = process.argv.slice(2);
-const specHoursOnly = args.includes('--spec-hours');
+const withSampleData = args.includes('--with-sample-data');
 const connectionString =
   args.find((arg) => !arg.startsWith('--')) ?? process.env.SUPABASE_DB_URL ?? process.env.TEST_DATABASE_URL;
 
@@ -54,6 +66,19 @@ if (!connectionString) {
 }
 
 const isRemote = /supabase\.(co|com)|amazonaws/i.test(connectionString);
+
+// Pre-flight, BEFORE connecting. §10's therapists and prices are invented, and
+// this must refuse whether or not the host happens to resolve — otherwise a
+// hosted URL with a typo fails on DNS and the refusal never runs, which teaches
+// you nothing about the flag being wrong.
+if (withSampleData && isRemote) {
+  console.error(
+    '--with-sample-data refused: that connection string points at a hosted Supabase project.\n' +
+      "  supabase/seed.sql contains spec §10's EXAMPLE therapists and prices, not real ones.\n" +
+      '  Add the real treatments and staff through Admin > Setup instead.',
+  );
+  process.exit(1);
+}
 
 const client = new Client({
   connectionString,
@@ -81,8 +106,13 @@ try {
     "select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'auth' and p.proname = 'uid'",
   );
 
-  const toApply = specHoursOnly ? FILES.filter((f) => !f.includes('seed-production')) : [...FILES];
-  if (specHoursOnly) console.log('  (--spec-hours: keeping §10 fixture hours, skipping the real ones)');
+  const toApply = [...MIGRATIONS];
+
+  if (withSampleData) {
+    // The hosted-project refusal already happened pre-flight, above.
+    toApply.push(...SAMPLE_DATA);
+    console.log('  (--with-sample-data: adding §10 example therapists and treatments)');
+  }
   if (hasAuth.rows.length === 0) {
     if (isRemote) {
       throw new Error(
@@ -110,31 +140,51 @@ try {
   }
 
   const counts = await client.query(
-    `select (select count(*) from services)  as services,
+    `select (select count(*) from businesses) as businesses,
+            (select count(*) from services)  as services,
             (select count(*) from staff)     as staff,
             (select count(*) from resources) as resources,
             (select count(*) from working_hours) as hours`,
   );
-  console.log('\nSeeded:', counts.rows[0]);
+  const n = counts.rows[0];
+  console.log('\nIn the database:', n);
 
-  // Print the hours back so a wrong day is obvious now rather than when a
-  // customer is turned away.
-  const week = await client.query(
-    `select wh.day_of_week as dow,
-            min(wh.start_time)::text as opens,
-            max(wh.end_time)::text   as closes
-       from working_hours wh
-       join staff s on s.id = wh.staff_id
-      group by wh.day_of_week order by wh.day_of_week`,
-  );
-  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const byDay = new Map(week.rows.map((r) => [r.dow, r]));
-  console.log('\nOpening hours now in the database:');
-  for (const dow of [1, 2, 3, 4, 5, 6, 0]) {
-    const row = byDay.get(dow);
+  const business = await client.query('select name, address, phone from businesses limit 1');
+  if (business.rows.length > 0) {
+    const b = business.rows[0];
+    // Echo the NAP back: §8 needs it byte-identical to the Google profile, and
+    // reading it here is cheaper than noticing later that it drifted.
+    console.log(`\n  ${b.name}\n  ${b.address ?? '(no address)'}\n  ${b.phone}`);
+  }
+
+  if (Number(n.staff) === 0) {
     console.log(
-      `  ${names[dow]}  ${row ? `${row.opens.slice(0, 5)}–${row.closes.slice(0, 5)}` : 'closed'}`,
+      '\nNo therapists or treatments yet, so /book has nothing to offer.\n' +
+        '  That is expected: the example ones in seed.sql are invented and are not\n' +
+        '  deployed. Add the real treatments, therapists, rooms and hours in\n' +
+        '  Admin > Setup, or pass --with-sample-data against a LOCAL database to\n' +
+        '  work with the examples.',
     );
+  } else {
+    // Print the hours back so a wrong day is obvious now rather than when a
+    // customer is turned away.
+    const week = await client.query(
+      `select wh.day_of_week as dow,
+              min(wh.start_time)::text as opens,
+              max(wh.end_time)::text   as closes
+         from working_hours wh
+         join staff s on s.id = wh.staff_id
+        group by wh.day_of_week order by wh.day_of_week`,
+    );
+    const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const byDay = new Map(week.rows.map((r) => [r.dow, r]));
+    console.log('\nOpening hours now in the database:');
+    for (const dow of [1, 2, 3, 4, 5, 6, 0]) {
+      const row = byDay.get(dow);
+      console.log(
+        `  ${names[dow]}  ${row ? `${row.opens.slice(0, 5)}–${row.closes.slice(0, 5)}` : 'closed'}`,
+      );
+    }
   }
 
   const members = await client.query('select count(*)::int as n from business_members');

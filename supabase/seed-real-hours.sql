@@ -1,16 +1,23 @@
 -- ---------------------------------------------------------------------------
 -- Real opening hours for Grace Nails and Beauty Spa.
 --
--- Applied ON TOP OF seed.sql. Safe to re-run — it replaces the whole set of
--- working_hours rows for this business rather than adding to them.
+-- ⚠ LOCAL DEVELOPMENT ONLY — this does NOT reach the hosted project.
+-- It sets hours for the SAMPLE therapists created by seed.sql, so that a local
+-- database behaves like the real week. Supabase's GitHub integration applies
+-- only supabase/migrations/*.sql, and the real therapists do not exist yet
+-- anyway: working_hours rows hang off staff, so real hours cannot be seeded
+-- until the real therapists are known. Set them in Admin > Setup, which writes
+-- the same rows through the §7.1 guards.
 --
--- WHY THIS IS A SEPARATE FILE
+-- (This file was called seed-production.sql, which was misleading — it never
+-- went anywhere near production.)
+--
+-- WHY IT IS SEPARATE FROM seed.sql
 -- seed.sql carries spec §10's fixture hours (Tue–Sat, closing 17:00), and the
 -- §9 acceptance tests are pinned to them: §10 claims that configuration
 -- reproduces every edge case in §9 without further setup, and it does. The real
--- profile is open seven days until 20:00, which has no closed weekday and a
--- different last-bookable-slot, so folding it into seed.sql would break those
--- assertions for no benefit. Tests use the fixture; production uses this.
+-- week is open seven days until 20:00, with no closed weekday and a later last
+-- bookable slot, so folding it into seed.sql would break those assertions.
 --
 -- FROM THE GOOGLE BUSINESS PROFILE
 --   Monday     9 am – 8 pm    (listed with "National Women's Day (Observed)")

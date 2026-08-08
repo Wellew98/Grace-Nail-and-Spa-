@@ -26,6 +26,12 @@ export const IDS = {
 
 export const TZ = 'Africa/Johannesburg';
 
+// The business row lives in migration 0003 (Supabase only deploys migrations),
+// and truncating `businesses` cascades it away — so a reset has to re-apply both.
+const businessSql = readFileSync(
+  new URL('../../supabase/migrations/0003_business.sql', import.meta.url),
+  'utf8',
+);
 const seedSql = readFileSync(new URL('../../supabase/seed.sql', import.meta.url), 'utf8');
 
 /**
@@ -36,6 +42,7 @@ export async function resetDatabase(): Promise<void> {
   const pool = getPool();
   await pool.query('truncate businesses restart identity cascade');
   await pool.query('truncate business_members');
+  await pool.query(businessSql);
   await pool.query(seedSql);
 }
 

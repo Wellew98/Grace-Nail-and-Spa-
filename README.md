@@ -22,8 +22,10 @@ Gel Manicure R250, Pedicure R320).
 whole site prices off those numbers, so publishing as-is would put invented staff and invented
 prices in front of real customers. This is the one item that genuinely blocks launch.
 
-All of it is editable from **Admin → Setup** once you can sign in, or directly in the seed.
-Changing a price never touches bookings already on the diary (§7.1).
+Because of that, none of it deploys: `seed.sql` is never applied to the hosted project, and
+the migration script refuses to apply it to one. A deployed database has the real business row
+and an empty treatment list until you add the real treatments and therapists in
+**Admin → Setup**. Changing a price there never touches bookings already on the diary (§7.1).
 
 ### 2. NAP is live, taken from the profile
 
@@ -51,7 +53,7 @@ the observed holiday. So those two rows may be holiday-adjusted rather than the 
 
 Monday matches every other weekday, so it is almost certainly right. **Sunday's shorter 9–4 is
 the one to check.** If Sunday is normally closed, delete the Sunday insert in
-`supabase/seed-production.sql` — an absent row *is* closed, and nothing else changes.
+`supabase/seed-real-hours.sql` — an absent row *is* closed, and nothing else changes.
 
 Public holidays themselves are not modelled in hours; they belong in **Admin → Block**, which
 is what §3's `availability_blocks` table is for.
@@ -101,18 +103,67 @@ business. If the owner confirms details like those, add them.
 
 ---
 
+## Deploying via the Supabase GitHub integration
+
+The project is connected to this repo, so **merging into the production branch applies
+`supabase/migrations/*.sql` to the production database.** Three things follow from that, and
+the first two are easy to get wrong.
+
+### What deploys, and what does not
+
+| File | Deploys? |
+|---|---|
+| `supabase/migrations/0001_init.sql` | ✅ schema and both exclusion constraints |
+| `supabase/migrations/0002_rls.sql` | ✅ RLS policies |
+| `supabase/migrations/0003_business.sql` | ✅ the real business row and NAP |
+| `supabase/seed.sql` | ❌ **never** |
+| `supabase/seed-real-hours.sql` | ❌ never |
+| `supabase/local/0000_local_bootstrap.sql` | ❌ never, correctly — it fakes Supabase's own auth roles |
+
+Supabase's docs are explicit that `seed.sql` is applied to **preview branches only**, and
+preview branches need the Pro plan. So the business row had to move into a migration —
+otherwise the schema would deploy with no business at all and every page would render
+"No business configured".
+
+The example therapists and treatments stay out of `migrations/` on purpose. They are spec
+§10's invented data, and deploying them would advertise staff who don't exist at prices
+that aren't yours. `npm run db:migrate --with-sample-data` refuses outright when the
+connection string points at a hosted project.
+
+### ⚠ The production branch is a feature branch
+
+It is currently set to `claude/project-doc-8cv2my`. That means **every push to that branch
+migrates the production database, with no review step in between.** Normally the production
+branch is `main`, so a pull request is the gate.
+
+To add that gate: create `main` from this branch, push it, and change **Production branch
+name** to `main` in the Supabase integration settings. Migrations then apply on merge rather
+than on every push.
+
+### After the first deploy
+
+Migrations create the schema and the business row, but no therapists or treatments — so
+`/book` will correctly have nothing to offer until you add them in **Admin → Setup**.
+
 ## Running it
 
 ```bash
 npm install
 cp .env.example .env.local     # fill in the values
-npm run db:migrate             # applies schema, RLS and seed to SUPABASE_DB_URL
+
+# schema + RLS + the business row, to SUPABASE_DB_URL
+npm run db:migrate
+
+# for local work, add §10's example therapists and treatments too
+npm run db:migrate -- --with-sample-data
+
 npm run dev
 ```
 
-`db:migrate` is safe to re-run. Against a bare Postgres it also applies the
-local stand-in for Supabase's `auth` schema; against a real project it skips
-that. To target a database explicitly:
+`db:migrate` is safe to re-run and applies exactly what the GitHub integration applies, so
+running it and merging produce the same database. Against a bare Postgres it also applies the
+local stand-in for Supabase's `auth` schema; against a hosted project it skips that, and it
+refuses `--with-sample-data` outright. To target a database explicitly:
 
 ```bash
 npm run db:migrate -- "postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres"

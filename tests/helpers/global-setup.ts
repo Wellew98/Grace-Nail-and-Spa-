@@ -25,8 +25,12 @@ export default async function setup() {
   const db = new Client({ connectionString: TEST_URL });
   await db.connect();
   await db.query(sql('supabase/local/0000_local_bootstrap.sql'));
+  // The same migrations Supabase applies on merge, in the same order, so the
+  // tests exercise the real deployed schema rather than a parallel definition.
   await db.query(sql('supabase/migrations/0001_init.sql'));
   await db.query(sql('supabase/migrations/0002_rls.sql'));
+  await db.query(sql('supabase/migrations/0003_business.sql'));
+  // §10's example therapists and treatments. Test fixture only — never deployed.
   await db.query(sql('supabase/seed.sql'));
   await db.end();
 }

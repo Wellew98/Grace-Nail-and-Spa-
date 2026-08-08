@@ -1,6 +1,18 @@
 -- ---------------------------------------------------------------------------
 -- Seed data — spec §10
 --
+-- ⚠ SAMPLE DATA. NEVER DEPLOY THIS TO PRODUCTION.
+-- The therapists ("Sarah", "Nomsa", "Lerato"), the five treatments and their
+-- prices are spec §10's EXAMPLES, not Grace Nails and Beauty Spa's real staff
+-- or price list. Putting them in front of customers would advertise invented
+-- people and invented prices.
+--
+-- This file is for the acceptance tests and local development only. Supabase's
+-- GitHub integration does not apply it to the hosted project (seed.sql is
+-- documented as preview-branch only), and `npm run db:migrate` only applies it
+-- when you pass --with-sample-data. The real business row deploys separately
+-- via migrations/0003_business.sql.
+--
 -- Fixed UUIDs so the acceptance tests in §9 can reference rows directly
 -- without a lookup round-trip. Safe to re-run: everything is ON CONFLICT
 -- DO NOTHING keyed on the fixed id.
@@ -15,44 +27,10 @@
 -- ---------------------------------------------------------------------------
 
 -- ---------- business ----------
--- REAL NAP, taken from the Google Business Profile. Spec §8 requires these to
--- match the profile byte for byte — same words, same order, same punctuation —
--- so do not "tidy" them. This row is the ONLY place NAP lives: the footer, the
--- contact page and the LocalBusiness JSON-LD all render from it.
---
--- GBP as given:
---   Grace Nails and Beauty Spa
---   11 Amanda Ave, Glenanda, Johannesburg, 2091
---   063 352 5374        (E.164 +27633525374; displays back as 063 352 5374)
---   Category: Nail salon
---
--- email is NULL because the profile lists none. The footer and contact page
--- both omit the row rather than inventing an address.
-insert into businesses (
-  id, name, slug, phone, whatsapp, email, address, google_maps_url,
-  timezone, min_notice_minutes, max_advance_days
-) values (
-  '00000000-0000-4000-8000-0000000000b1',
-  'Grace Nails and Beauty Spa',
-  'grace-nails-and-beauty-spa',
-  '+27633525374',
-  '+27633525374',   -- the profile offers wa.me on this number; confirm if a separate line is used
-  null,
-  '11 Amanda Ave, Glenanda, Johannesburg, 2091',
-  -- A Maps search on the exact name + address. Swap for the canonical listing
-  -- URL (or set gbp_place_id) once you have it from the profile's Share menu.
-  'https://www.google.com/maps/search/?api=1&query=Grace+Nails+and+Beauty+Spa%2C+11+Amanda+Ave%2C+Glenanda%2C+Johannesburg%2C+2091',
-  'Africa/Johannesburg',
-  120,
-  60
-) on conflict (id) do update set
-  name            = excluded.name,
-  slug            = excluded.slug,
-  phone           = excluded.phone,
-  whatsapp        = excluded.whatsapp,
-  email           = excluded.email,
-  address         = excluded.address,
-  google_maps_url = excluded.google_maps_url;
+-- NOT HERE ANY MORE. The real business row lives in
+-- supabase/migrations/0003_business.sql, because Supabase's GitHub integration
+-- applies migrations to the hosted project and never applies this file. Apply
+-- 0003 before this file; everything below references the business id it creates.
 
 -- ---------- services (§10) ----------
 insert into services (id, business_id, name, description, duration_minutes, turnaround_minutes, price_cents, sort_order) values
@@ -141,8 +119,9 @@ on conflict do nothing;
 -- "reproduces every edge case in §9 without further setup", and it does. The
 -- real profile is open seven days until 20:00, which would break the closed-day
 -- and end-of-window assertions.
--- supabase/seed-production.sql replaces these with the real hours and is what
--- `npm run db:migrate` applies on top. The test suite applies this file only.
+-- supabase/seed-real-hours.sql replaces these with the real week for LOCAL work,
+-- applied on top by `npm run db:migrate --with-sample-data`. The test suite
+-- applies this file only, so the §9 assertions stay pinned to the fixture.
 insert into working_hours (staff_id, day_of_week, start_time, end_time)
 select s.id, d.dow, '09:00'::time, '17:00'::time
 from staff s
