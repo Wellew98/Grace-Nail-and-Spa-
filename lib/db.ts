@@ -36,11 +36,51 @@ function connectionString(): string {
   const url = process.env.SUPABASE_DB_URL ?? process.env.TEST_DATABASE_URL;
   if (!url) {
     throw new Error(
-      'SUPABASE_DB_URL is not set. Copy .env.example to .env.local and fill it in ' +
-        '(Supabase: Project Settings > Database > Connection string).',
+      'SUPABASE_DB_URL is not set.\n' +
+        (process.env.VERCEL
+          ? '  On Vercel: Settings > Environment Variables. Use the TRANSACTION POOLER\n' +
+            '  string from Supabase > Connect (port 6543), not the direct connection —\n' +
+            '  direct connections are IPv6-only and Vercel builds are IPv4.\n' +
+            '  Then redeploy; env vars do not apply to an existing build.'
+          : '  Locally: copy .env.example to .env.local and fill it in\n' +
+            '  (Supabase > Connect, or Project Settings > Database).'),
     );
   }
   return url;
+}
+
+/**
+ * Turn a connection failure into something actionable.
+ *
+ * The pages under app/ are prerendered, so the FIRST thing a deploy does is
+ * query the database — and a bare `ECONNREFUSED` or `ENOTFOUND` at
+ * "Collecting page data" gives no clue which of the several plausible causes it
+ * is. Each of these has bitten a real deploy of this app.
+ */
+function describeConnectionFailure(error: unknown, url: string): string {
+  const code = (error as { code?: string } | null)?.code;
+  const usingDirect = /db\.[a-z0-9]+\.supabase\.co/i.test(url);
+
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') {
+    return usingDirect
+      ? 'Could not resolve the Supabase host. This is the DIRECT connection string, which is ' +
+          'IPv6-only — Vercel build machines are IPv4. Use the Transaction pooler string ' +
+          '(Supabase > Connect, port 6543) instead.'
+      : 'Could not resolve the database host. Check SUPABASE_DB_URL for a typo.';
+  }
+  if (code === 'ECONNREFUSED') {
+    return 'The database refused the connection. If this is a free Supabase project it may be ' +
+      'PAUSED after inactivity — open the dashboard to resume it.';
+  }
+  if (code === 'ETIMEDOUT') {
+    return 'Timed out reaching the database. If this is the direct connection string, switch to ' +
+      'the Transaction pooler (port 6543).';
+  }
+  if (code === '28P01') {
+    return 'Password rejected. Copy the connection string again from Supabase > Connect; the ' +
+      'password placeholder has to be replaced with the real database password.';
+  }
+  return '';
 }
 
 // Next.js reloads modules in dev; without this every save leaks a pool.
@@ -96,8 +136,31 @@ export async function query<T = Record<string, unknown>>(
   text: string,
   params: unknown[] = [],
 ): Promise<T[]> {
-  const result = await getPool().query(text, params as never[]);
-  return result.rows as T[];
+  try {
+    const result = await getPool().query(text, params as never[]);
+    return result.rows as T[];
+  } catch (error) {
+    throw explainIfConnectionFailure(error);
+  }
+}
+
+/**
+ * Re-throw connection failures with the diagnosis attached, leaving query
+ * errors (constraint violations especially) exactly as they were — the write
+ * path matches on SQLSTATE 23P01 and must keep seeing the original error.
+ */
+function explainIfConnectionFailure(error: unknown): unknown {
+  const explanation = describeConnectionFailure(
+    error,
+    process.env.SUPABASE_DB_URL ?? process.env.TEST_DATABASE_URL ?? '',
+  );
+  if (!explanation) return error;
+
+  const wrapped = new Error(
+    `${explanation}\n  (original: ${(error as Error)?.message ?? String(error)})`,
+  );
+  (wrapped as { cause?: unknown }).cause = error;
+  return wrapped;
 }
 
 export async function queryOne<T = Record<string, unknown>>(

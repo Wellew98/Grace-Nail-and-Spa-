@@ -491,6 +491,48 @@ describe('cancellation', () => {
   });
 });
 
+describe('database errors keep their SQLSTATE', () => {
+  /**
+   * lib/db.ts wraps CONNECTION failures with a plain-English diagnosis so a
+   * failed deploy says which cause it is. That wrapper must never touch query
+   * errors: §5 step 8 dispatches on SQLSTATE 23P01 specifically, and an
+   * exclusion violation that arrives as a generic Error stops being a clean 409
+   * and becomes a 500 — double bookings would still be refused, but the
+   * customer would see a crash instead of fresh times.
+   */
+  it('passes an exclusion violation through untouched', async () => {
+    const date = nextWorkingDate();
+    const booked = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      staffId: IDS.staff.sarah,
+      startsAt: at(date, '10:00'),
+      ...customer,
+    });
+    if (!booked.ok) throw new Error('setup failed');
+
+    // Same therapist, overlapping range, straight through query() rather than
+    // the write path, so nothing catches it on the way out.
+    const clash = query(
+      `insert into appointments (business_id, service_id, staff_id, customer_id,
+                                 starts_at, ends_at, blocks_until, manage_token,
+                                 price_cents_at_booking)
+       values ($1,$2,$3,$4,$5,$6,$7,'regression-token',50000)`,
+      [
+        IDS.business,
+        IDS.service.fullBodyMassage,
+        IDS.staff.sarah,
+        booked.appointment.customer_id,
+        at(date, '10:30').toISOString(),
+        at(date, '11:30').toISOString(),
+        at(date, '11:45').toISOString(),
+      ],
+    );
+
+    await expect(clash).rejects.toMatchObject({ code: '23P01' });
+  });
+});
+
 describe('phone normalisation (§12)', () => {
   it('stores E.164 and treats formatting variants as the same customer', async () => {
     const date = nextWorkingDate();
