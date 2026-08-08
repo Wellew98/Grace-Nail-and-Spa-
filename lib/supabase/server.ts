@@ -18,7 +18,7 @@ export async function createClient() {
 
   return createServerClient(
     requiredEnv('NEXT_PUBLIC_SUPABASE_URL'),
-    requiredEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+    requirePublishableKey(),
     {
       cookies: {
         getAll() {
@@ -49,6 +49,34 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+/**
+ * The public, RLS-gated key, under either of the names Supabase has used.
+ *
+ * Supabase's newer API keys are `sb_publishable_…` (public, replaces the anon
+ * key) and `sb_secret_…` (server only, replaces the service role key). They are
+ * drop-in replacements in the client's anon-key position, but projects name the
+ * env var differently depending on when they were set up. Accepting both means
+ * whichever the dashboard handed you works without editing code.
+ */
+export function publishableKey(): string | undefined {
+  return (
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    undefined
+  );
+}
+
+function requirePublishableKey(): string {
+  const key = publishableKey();
+  if (!key) {
+    throw new Error(
+      'No Supabase public key set. Provide NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ' +
+        '(sb_publishable_…) or NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.',
+    );
+  }
+  return key;
+}
+
 export function supabaseConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && publishableKey());
 }

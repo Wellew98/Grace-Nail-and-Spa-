@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:reset": "node scripts/db-reset.mjs"
+    "db:migrate": "node scripts/apply-migrations.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

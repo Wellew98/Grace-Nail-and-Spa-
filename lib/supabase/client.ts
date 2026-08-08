@@ -10,8 +10,12 @@ import { createBrowserClient } from '@supabase/ssr';
  * inside `server-only` modules.
  */
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
+  // Both names are read because Supabase's newer projects issue
+  // `sb_publishable_…` keys under NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, while
+  // older ones use the anon key. Inlined rather than imported from the server
+  // module so nothing server-only is pulled into the browser bundle.
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  return createBrowserClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, key!);
 }

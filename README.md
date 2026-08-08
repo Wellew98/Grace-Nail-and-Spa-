@@ -30,10 +30,19 @@ Nothing else needs touching.
 
 ### 2. The admin has not been run end to end
 
-The admin uses Supabase Auth, and this build had no Supabase project to point at. The code
-compiles, the routes render, and everything the screens read and write is covered by tests
-(`tests/admin.test.ts`) — but the signed-in UI itself has never been exercised against a
-real session. Treat the first login as a smoke test rather than a formality.
+The admin uses Supabase Auth, and this build could not reach a Supabase project — the build
+environment's network policy blocks `*.supabase.co`, so no amount of credentials would have
+helped. The code compiles, the routes render, and everything the screens read and write is
+covered by tests (`tests/admin.test.ts`) — but the signed-in UI itself has never been
+exercised against a real session. Treat the first login as a smoke test rather than a
+formality.
+
+First run, in order:
+
+1. `npm run db:migrate` against the project connection string.
+2. Supabase → Authentication → Add user, to create the owner.
+3. The `business_members` insert below, to link her to the business.
+4. Sign in at `/admin/login` and confirm Today renders.
 
 Everything else — the booking engine, availability, the public site, `/book`, `/b/[token]`
 — has been run against a real Postgres and a real HTTP server.
@@ -51,13 +60,16 @@ into. When real photos exist, they belong on `/gallery` and on the Google profil
 ```bash
 npm install
 cp .env.example .env.local     # fill in the values
-
-# apply to your Supabase project (SQL editor, or psql against the connection string)
-supabase/migrations/0001_init.sql
-supabase/migrations/0002_rls.sql
-supabase/seed.sql
-
+npm run db:migrate             # applies schema, RLS and seed to SUPABASE_DB_URL
 npm run dev
+```
+
+`db:migrate` is safe to re-run. Against a bare Postgres it also applies the
+local stand-in for Supabase's `auth` schema; against a real project it skips
+that. To target a database explicitly:
+
+```bash
+npm run db:migrate -- "postgresql://postgres:...@db.<ref>.supabase.co:5432/postgres"
 ```
 
 Create the owner in Supabase → Authentication → Add user, then link her to the business:
@@ -74,9 +86,10 @@ bug.
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Public key, gated by RLS |
-| `SUPABASE_SERVICE_ROLE_KEY` | Server only. **Never** `NEXT_PUBLIC_` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL, `https://<ref>.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Public key (`sb_publishable_…`), gated by RLS |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Older name for the same thing; either works |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server only. **Never** `NEXT_PUBLIC_`. Not currently read |
 | `SUPABASE_DB_URL` | Postgres connection string for the booking engine — see below |
 | `RESEND_API_KEY`, `BOOKING_FROM_EMAIL`, `OWNER_NOTIFICATION_EMAIL` | Confirmation email |
 | `NEXT_PUBLIC_SITE_URL` | Absolute URL, used in manage links and JSON-LD |
