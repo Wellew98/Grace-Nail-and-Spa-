@@ -1,4 +1,4 @@
-# Grace Nail and Spa
+# Grace Nails and Beauty Spa
 
 Booking system for a South African day spa. Next.js (App Router) + Postgres/Supabase +
 Tailwind, ZAR, `Africa/Johannesburg`.
@@ -10,25 +10,53 @@ WhatsApp reminders and deposits (Phases 3–5) are deliberately not built.
 
 ## Before this goes live
 
-Two things are still placeholders and one screen is unverified. Please read this section.
+NAP is real now. Four things still need the owner. Please read this section.
 
-### 1. NAP is placeholder data
+### 1. ⚠ The therapists and treatments are still sample data
 
-Spec §8 requires name, address and phone to match the Google Business Profile **byte for
-byte**. I did not have the real details, so `supabase/seed.sql` ships obvious placeholders:
+`seed.sql` ships spec §10's example configuration: three therapists named **Sarah, Nomsa and
+Lerato**, and five treatments (Full Body Massage R500, Back & Neck R280, Classic Facial R350,
+Gel Manicure R250, Pedicure R320).
 
-```
-phone     +27821234567
-whatsapp  +27821234567
-email     hello@gracenailandspa.co.za
-address   12 Example Road, Sandton, Johannesburg, 2196
-```
+**None of that came from the business.** The About page lists the therapists by name and the
+whole site prices off those numbers, so publishing as-is would put invented staff and invented
+prices in front of real customers. This is the one item that genuinely blocks launch.
 
-They live in **one place only** — the `businesses` row. The footer, the contact page and
-the `LocalBusiness` JSON-LD all render from it, so correcting that row corrects everything.
-Nothing else needs touching.
+All of it is editable from **Admin → Setup** once you can sign in, or directly in the seed.
+Changing a price never touches bookings already on the diary (§7.1).
 
-### 2. The admin has not been run end to end
+### 2. NAP is live, taken from the profile
+
+| | |
+|---|---|
+| Name | Grace Nails and Beauty Spa |
+| Address | 11 Amanda Ave, Glenanda, Johannesburg, 2091 |
+| Phone | 063 352 5374 → stored `+27633525374`, displays `063 352 5374` |
+| Email | none on the profile, so stored NULL and omitted from the site |
+| Category | Nail salon → JSON-LD `NailSalon` |
+
+These live in **one place only** — the `businesses` row. The footer, the contact page and the
+`LocalBusiness` JSON-LD all render from it, so correcting that row corrects everything.
+
+Two follow-ups: the WhatsApp number is assumed to be the same line as the phone (the profile
+offers `wa.me` but does not say), and `google_maps_url` is a Maps search on the exact name and
+address rather than the canonical listing URL — replace it from the profile's Share menu, or
+set `gbp_place_id`.
+
+### 3. ⚠ Confirm Sunday's opening hours
+
+The profile lists Mon–Sat 09:00–20:00 and Sun 09:00–16:00, but Google flagged **Sunday and
+Monday** with "Hours might differ" because 9 August is National Women's Day and 10 August is
+the observed holiday. So those two rows may be holiday-adjusted rather than the regular week.
+
+Monday matches every other weekday, so it is almost certainly right. **Sunday's shorter 9–4 is
+the one to check.** If Sunday is normally closed, delete the Sunday insert in
+`supabase/seed-production.sql` — an absent row *is* closed, and nothing else changes.
+
+Public holidays themselves are not modelled in hours; they belong in **Admin → Block**, which
+is what §3's `availability_blocks` table is for.
+
+### 4. The admin has not been run end to end
 
 The admin uses Supabase Auth, and this build could not reach a Supabase project — the build
 environment's network policy blocks `*.supabase.co`, so no amount of credentials would have
@@ -47,11 +75,29 @@ First run, in order:
 Everything else — the booking engine, availability, the public site, `/book`, `/b/[token]`
 — has been run against a real Postgres and a real HTTP server.
 
-### 3. There is no photography
+### 5. There is no photography
 
 The gallery is built from the treatment colour range rather than stock images, because
 borrowed photographs of someone else's studio would misrepresent the room a guest walks
 into. When real photos exist, they belong on `/gallery` and on the Google profile.
+
+The swatch colours are **this site's way of telling treatments apart** — they are not a
+stock list. An earlier draft of the gallery copy said they were "the shades currently on the
+shelf", which was not true, and was rewritten.
+
+### A note on the site copy
+
+`lib/site.ts` holds every word of prose. Only two kinds of claim are allowed in it:
+
+1. Claims about the **booking system**, which are true by construction and checkable against
+   the code — appointment lengths exclude turnaround, a room is reserved alongside the
+   therapist, every confirmation carries a link to move or cancel.
+2. Claims drawn from the business's **own Google Business Profile** — the Glenanda location,
+   the categories of work, the beauty therapists.
+
+An earlier draft invented a founding story ("started as two chairs and a folding table") and
+asserted specific hygiene practice. Both were removed: neither was ours to assert about a real
+business. If the owner confirms details like those, add them.
 
 ---
 

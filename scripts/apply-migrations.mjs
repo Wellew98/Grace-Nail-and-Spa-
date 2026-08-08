@@ -17,7 +17,14 @@
 import { readFileSync, existsSync } from 'node:fs';
 import { Client } from 'pg';
 
-const FILES = ['supabase/migrations/0001_init.sql', 'supabase/migrations/0002_rls.sql', 'supabase/seed.sql'];
+const FILES = [
+  'supabase/migrations/0001_init.sql',
+  'supabase/migrations/0002_rls.sql',
+  'supabase/seed.sql',
+  // Real opening hours, layered over spec §10's fixture hours. Pass
+  // --spec-hours to stop before this and keep the fixture (what the tests use).
+  'supabase/seed-production.sql',
+];
 
 function loadEnvLocal() {
   if (!existsSync('.env.local')) return;
@@ -31,7 +38,10 @@ function loadEnvLocal() {
 
 loadEnvLocal();
 
-const connectionString = process.argv[2] ?? process.env.SUPABASE_DB_URL ?? process.env.TEST_DATABASE_URL;
+const args = process.argv.slice(2);
+const specHoursOnly = args.includes('--spec-hours');
+const connectionString =
+  args.find((arg) => !arg.startsWith('--')) ?? process.env.SUPABASE_DB_URL ?? process.env.TEST_DATABASE_URL;
 
 if (!connectionString) {
   console.error(
@@ -71,7 +81,8 @@ try {
     "select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'auth' and p.proname = 'uid'",
   );
 
-  const toApply = [...FILES];
+  const toApply = specHoursOnly ? FILES.filter((f) => !f.includes('seed-production')) : [...FILES];
+  if (specHoursOnly) console.log('  (--spec-hours: keeping §10 fixture hours, skipping the real ones)');
   if (hasAuth.rows.length === 0) {
     if (isRemote) {
       throw new Error(
@@ -105,6 +116,26 @@ try {
             (select count(*) from working_hours) as hours`,
   );
   console.log('\nSeeded:', counts.rows[0]);
+
+  // Print the hours back so a wrong day is obvious now rather than when a
+  // customer is turned away.
+  const week = await client.query(
+    `select wh.day_of_week as dow,
+            min(wh.start_time)::text as opens,
+            max(wh.end_time)::text   as closes
+       from working_hours wh
+       join staff s on s.id = wh.staff_id
+      group by wh.day_of_week order by wh.day_of_week`,
+  );
+  const names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const byDay = new Map(week.rows.map((r) => [r.dow, r]));
+  console.log('\nOpening hours now in the database:');
+  for (const dow of [1, 2, 3, 4, 5, 6, 0]) {
+    const row = byDay.get(dow);
+    console.log(
+      `  ${names[dow]}  ${row ? `${row.opens.slice(0, 5)}–${row.closes.slice(0, 5)}` : 'closed'}`,
+    );
+  }
 
   const members = await client.query('select count(*)::int as n from business_members');
   if (members.rows[0].n === 0) {

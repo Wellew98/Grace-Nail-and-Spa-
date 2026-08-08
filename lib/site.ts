@@ -8,24 +8,50 @@
  * and JSON-LD alike. To change them, change that one row.
  */
 
-export const BUSINESS_SLUG = process.env.NEXT_PUBLIC_BUSINESS_SLUG ?? 'grace-nail-and-spa';
+export const BUSINESS_SLUG = process.env.NEXT_PUBLIC_BUSINESS_SLUG ?? 'grace-nails-and-beauty-spa';
 
+/**
+ * Site copy.
+ *
+ * ---------------------------------------------------------------------------
+ * GROUND RULES FOR EDITING THIS FILE
+ *
+ * Only two kinds of claim are allowed here:
+ *
+ *   1. Claims about the BOOKING SYSTEM, which are true by construction and can
+ *      be checked against the code — appointment lengths exclude turnaround,
+ *      a room is reserved alongside the therapist, every confirmation carries a
+ *      link to move or cancel.
+ *   2. Claims drawn from the business's OWN Google Business Profile description
+ *      and listing — the location, the categories of work, the therapists.
+ *
+ * Anything else is an unverifiable claim about a real business. An earlier draft
+ * of this file invented a founding story ("started as two chairs and a folding
+ * table") and asserted specific hygiene practice; both were removed because
+ * neither was ours to assert. If the owner confirms details like those, add
+ * them — until then, do not.
+ * ---------------------------------------------------------------------------
+ */
 export const SITE = {
-  tagline: 'Nails, massage and skin',
+  tagline: 'Nail artistry and spa treatments',
   /** The promise the whole build is organised around (spec §1). */
   heroLine: 'Book your treatment in under a minute.',
   heroSupport:
     'Pick a treatment, pick a time, done. No messaging back and forth, no waiting for someone to reply.',
   about: {
-    lead: 'A small studio, three therapists, and enough time booked for each guest that nobody is rushed.',
+    // Drawn from the profile description: Glenanda, nail artistry and spa
+    // treatments, beauty therapists, sessions tailored to the guest.
+    lead: 'A beauty studio in Glenanda, from precision nail work to unhurried spa treatments.',
     body: [
-      'Grace started as two chairs and a folding table. What has not changed since is the length of the appointments — a 60-minute massage here is sixty minutes of massage, with the room turned around properly before the next guest arrives.',
-      'Every treatment is done by a qualified therapist. Gel is soaked off, never filed off. Rooms and tools are sanitised between every guest, and we are happy to talk you through exactly how, because you should ask that everywhere you go.',
+      'Grace Nails and Beauty Spa sits in the heart of Glenanda, in the south of Johannesburg. Our beauty therapists take each session as its own thing rather than a slot to be filled, whether you are in for a gel colour or an hour on the table.',
+      'Appointments are the length they say they are. The time it takes to turn a room around afterwards is booked separately, behind your appointment, so it never comes out of yours.',
     ],
   },
   gallery: {
-    lead: 'The colour range, and the rooms.',
-    note: 'Swatches shown are the shades currently on the shelf. Ask for the full range in studio — we carry more than fits on a page.',
+    lead: 'A colour for every treatment.',
+    // Deliberately does NOT claim these are the shades on the shelf — they are
+    // this site's way of telling treatments apart, not a stock list.
+    note: 'Each treatment carries its own colour across the site, so you can find what you are after at a glance. The polish range itself is far bigger than any page — come and see it, or ask us for a shade.',
   },
 } as const;
 

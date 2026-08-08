@@ -29,11 +29,13 @@ export function TodayList({
   date,
   today,
   timezone,
+  businessName,
   appointments,
 }: {
   date: string;
   today: string;
   timezone: string;
+  businessName: string;
   appointments: Row[];
 }) {
   const router = useRouter();
@@ -172,7 +174,7 @@ export function TodayList({
                 <a
                   href={whatsappLink(
                     appointment.customerPhone,
-                    `Hi ${appointment.customerName.split(' ')[0]}, it's Grace Nail and Spa about your ${appointment.serviceName} booking.`,
+                    `Hi ${appointment.customerName.split(' ')[0]}, it's ${businessName} about your ${appointment.serviceName} booking.`,
                   )}
                   className="rounded-full bg-sage-600 px-3.5 py-2 text-xs font-medium text-blush-50 hover:opacity-90"
                 >

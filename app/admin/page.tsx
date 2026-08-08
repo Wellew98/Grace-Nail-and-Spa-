@@ -32,6 +32,7 @@ export default async function TodayPage({
       date={date}
       today={today}
       timezone={business.timezone}
+      businessName={business.name}
       appointments={appointments.map((appointment) => ({
         id: appointment.id,
         startsAt: new Date(appointment.starts_at).toISOString(),

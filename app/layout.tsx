@@ -35,7 +35,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
 export async function generateMetadata(): Promise<Metadata> {
   const business = await getBusiness();
-  const name = business?.name ?? 'Grace Nail and Spa';
+  const name = business?.name ?? 'Grace Nails and Beauty Spa';
 
   return {
     metadataBase: new URL(SITE_URL),

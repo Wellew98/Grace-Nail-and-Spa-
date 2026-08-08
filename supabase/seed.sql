@@ -15,27 +15,44 @@
 -- ---------------------------------------------------------------------------
 
 -- ---------- business ----------
--- NAP PLACEHOLDER. Spec §8 Phase 1 requires name/address/phone to match the
--- Google Business Profile byte for byte. Replace the marked values below with
--- the exact GBP strings. This row is the ONLY place NAP lives — the footer,
--- the contact page and the LocalBusiness JSON-LD all render from it, so there
--- is nothing else to keep in step.
+-- REAL NAP, taken from the Google Business Profile. Spec §8 requires these to
+-- match the profile byte for byte — same words, same order, same punctuation —
+-- so do not "tidy" them. This row is the ONLY place NAP lives: the footer, the
+-- contact page and the LocalBusiness JSON-LD all render from it.
+--
+-- GBP as given:
+--   Grace Nails and Beauty Spa
+--   11 Amanda Ave, Glenanda, Johannesburg, 2091
+--   063 352 5374        (E.164 +27633525374; displays back as 063 352 5374)
+--   Category: Nail salon
+--
+-- email is NULL because the profile lists none. The footer and contact page
+-- both omit the row rather than inventing an address.
 insert into businesses (
   id, name, slug, phone, whatsapp, email, address, google_maps_url,
   timezone, min_notice_minutes, max_advance_days
 ) values (
   '00000000-0000-4000-8000-0000000000b1',
-  'Grace Nail and Spa',
-  'grace-nail-and-spa',
-  '+27821234567',                       -- REPLACE with GBP phone
-  '+27821234567',                       -- REPLACE with WhatsApp number
-  'hello@gracenailandspa.co.za',        -- REPLACE
-  '12 Example Road, Sandton, Johannesburg, 2196',  -- REPLACE with GBP address
+  'Grace Nails and Beauty Spa',
+  'grace-nails-and-beauty-spa',
+  '+27633525374',
+  '+27633525374',   -- the profile offers wa.me on this number; confirm if a separate line is used
   null,
+  '11 Amanda Ave, Glenanda, Johannesburg, 2091',
+  -- A Maps search on the exact name + address. Swap for the canonical listing
+  -- URL (or set gbp_place_id) once you have it from the profile's Share menu.
+  'https://www.google.com/maps/search/?api=1&query=Grace+Nails+and+Beauty+Spa%2C+11+Amanda+Ave%2C+Glenanda%2C+Johannesburg%2C+2091',
   'Africa/Johannesburg',
   120,
   60
-) on conflict (id) do nothing;
+) on conflict (id) do update set
+  name            = excluded.name,
+  slug            = excluded.slug,
+  phone           = excluded.phone,
+  whatsapp        = excluded.whatsapp,
+  email           = excluded.email,
+  address         = excluded.address,
+  google_maps_url = excluded.google_maps_url;
 
 -- ---------- services (§10) ----------
 insert into services (id, business_id, name, description, duration_minutes, turnaround_minutes, price_cents, sort_order) values
@@ -118,6 +135,14 @@ on conflict do nothing;
 -- "Tue–Sat 09:00–17:00, Sat 09:00–14:00, closed Sun–Mon."
 -- day_of_week: 0 = Sunday. Tue=2 Wed=3 Thu=4 Fri=5 Sat=6.
 -- No rows for Sunday(0) or Monday(1) — absence of a row IS closed.
+--
+-- THESE ARE THE SPEC'S FIXTURE HOURS, NOT THE REAL ONES.
+-- The §9 acceptance tests are pinned to this configuration — §10 claims it
+-- "reproduces every edge case in §9 without further setup", and it does. The
+-- real profile is open seven days until 20:00, which would break the closed-day
+-- and end-of-window assertions.
+-- supabase/seed-production.sql replaces these with the real hours and is what
+-- `npm run db:migrate` applies on top. The test suite applies this file only.
 insert into working_hours (staff_id, day_of_week, start_time, end_time)
 select s.id, d.dow, '09:00'::time, '17:00'::time
 from staff s

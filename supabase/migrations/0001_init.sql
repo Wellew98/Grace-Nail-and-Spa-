@@ -1,5 +1,5 @@
 -- ---------------------------------------------------------------------------
--- Grace Nail and Spa — core schema
+-- Grace Nails and Beauty Spa — core schema
 -- Spec §3. All timestamps are timestamptz. Date and time are never stored
 -- in separate columns.
 -- ---------------------------------------------------------------------------

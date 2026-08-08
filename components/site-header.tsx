@@ -12,9 +12,11 @@ export function SiteHeader({ businessName }: { businessName: string }) {
   return (
     <header className="sticky top-0 z-50 border-b border-gilt-200/60 bg-blush-50/90 backdrop-blur-sm">
       <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-3.5">
+        {/* Sized to keep "Grace Nails and Beauty Spa" on one line at 390px —
+            wrapping it made the sticky header noticeably taller on a phone. */}
         <Link
           href="/"
-          className="font-display text-lg leading-none font-semibold tracking-tight text-aubergine-900"
+          className="font-display text-[0.95rem] leading-tight font-semibold tracking-tight text-aubergine-900 sm:text-lg sm:leading-none"
           onClick={() => setOpen(false)}
         >
           {businessName}

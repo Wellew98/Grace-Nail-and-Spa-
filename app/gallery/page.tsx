@@ -8,7 +8,7 @@ import { SITE } from '@/lib/site';
 
 export const metadata: Metadata = {
   title: 'Gallery',
-  description: 'The colour range currently on the shelf, and what each shade is used for.',
+  description: 'Our treatments at a glance, each with its own colour. Book any of them online.',
 };
 
 /**
