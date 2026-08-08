@@ -3,7 +3,8 @@ import { Fraunces, IBM_Plex_Mono, Karla } from 'next/font/google';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { LocalBusinessJsonLd } from '@/components/local-business-jsonld';
-import { getActiveServices, getBusiness, getOpeningHours } from '@/lib/public-data';
+import { DemoBanner } from '@/components/demo-banner';
+import { getActiveServices, getBusiness, getOpeningHours, hasDemoData } from '@/lib/public-data';
 import { SITE } from '@/lib/site';
 import './globals.css';
 
@@ -65,9 +66,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const [services, hours] = await Promise.all([
+  const [services, hours, showingDemoData] = await Promise.all([
     getActiveServices(business.id),
     getOpeningHours(business.id),
+    hasDemoData(business.id),
   ]);
 
   return (
@@ -79,6 +81,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           Skip to content
         </a>
+        {showingDemoData && <DemoBanner />}
         <SiteHeader businessName={business.name} />
         <main id="main" className="flex-1">
           {children}

@@ -12,20 +12,38 @@ WhatsApp reminders and deposits (Phases 3–5) are deliberately not built.
 
 NAP is real now. Four things still need the owner. Please read this section.
 
-### 1. ⚠ The therapists and treatments are still sample data
+### 1. ⚠ The treatments and therapists are placeholders
 
-`seed.sql` ships spec §10's example configuration: three therapists named **Sarah, Nomsa and
-Lerato**, and five treatments (Full Body Massage R500, Back & Neck R280, Classic Facial R350,
-Gel Manicure R250, Pedicure R320).
+`supabase/migrations/0004_demo_data.sql` provides a stand-in nail-salon menu (Gel Manicure
+R320, Express Manicure R180, Acrylic Full Set R480, Pedicure R350, Gel Pedicure R420, Classic
+Facial R380) and three therapists (Naledi, Precious, Zanele), so the site can be shown before
+the real list arrives.
 
-**None of that came from the business.** The About page lists the therapists by name and the
-whole site prices off those numbers, so publishing as-is would put invented staff and invented
-prices in front of real customers. This is the one item that genuinely blocks launch.
+**None of it came from the business.** While any of it is in the database, every page shows a
+banner reading *"Sample menu. These treatments, prices and therapists are placeholders while
+the real ones are confirmed."*
 
-Because of that, none of it deploys: `seed.sql` is never applied to the hosted project, and
-the migration script refuses to apply it to one. A deployed database has the real business row
-and an empty treatment list until you add the real treatments and therapists in
-**Admin → Setup**. Changing a price there never touches bookings already on the diary (§7.1).
+That banner is driven by the `dddddddd-` id prefix on those rows, not by a setting — so it
+turns itself off the moment they are gone. A flag would have to be remembered, and the failure
+direction is wrong: forget it and invented prices go out with nothing saying so.
+
+To remove, once the real data is in:
+
+```bash
+npm run db:demo-clear                        # local
+npm run db:demo-clear -- "<connection>"      # hosted project
+```
+
+It deletes them outright when nothing references them. If a real booking already points at a
+placeholder treatment, it **deactivates instead** — the booking keeps resolving at the price it
+was made at, and the treatment stops being offered (§7.1). Verified both ways.
+
+Spec §10's own example data (Sarah/Nomsa/Lerato, the massage-led menu) is separate again: it
+lives in `supabase/seed.sql`, is used only by the acceptance tests, never deploys, and
+`db:migrate` refuses `--with-sample-data` against a hosted project.
+
+**Still the launch blocker:** the real treatment names, lengths and prices, the real therapists,
+and which rooms or chairs exist.
 
 ### 2. NAP is live, taken from the profile
 
@@ -45,37 +63,35 @@ offers `wa.me` but does not say), and `google_maps_url` is a Maps search on the 
 address rather than the canonical listing URL — replace it from the profile's Share menu, or
 set `gbp_place_id`.
 
-### 3. ⚠ Confirm Sunday's opening hours
+### 3. Opening hours — confirmed
 
-The profile lists Mon–Sat 09:00–20:00 and Sun 09:00–16:00, but Google flagged **Sunday and
-Monday** with "Hours might differ" because 9 August is National Women's Day and 10 August is
-the observed holiday. So those two rows may be holiday-adjusted rather than the regular week.
+Mon–Sat **09:00–20:00**, Sun **09:00–16:00**, confirmed by the owner. Google had flagged Sunday
+and Monday with "Hours might differ" because of National Women's Day; the shorter Sunday is the
+real week, not a holiday adjustment.
 
-Monday matches every other weekday, so it is almost certainly right. **Sunday's shorter 9–4 is
-the one to check.** If Sunday is normally closed, delete the Sunday insert in
-`supabase/seed-real-hours.sql` — an absent row *is* closed, and nothing else changes.
+These hours are attached to the placeholder therapists. When the real ones are added, give them
+the same week in **Admin → Setup** — hours hang off each therapist, not off the business.
 
-Public holidays themselves are not modelled in hours; they belong in **Admin → Block**, which
-is what §3's `availability_blocks` table is for.
+Public holidays are not modelled in hours; they belong in **Admin → Block**, which is what §3's
+`availability_blocks` table is for.
 
-### 4. The admin has not been run end to end
+### 4. The admin has not been signed into
 
-The admin uses Supabase Auth, and this build could not reach a Supabase project — the build
-environment's network policy blocks `*.supabase.co`, so no amount of credentials would have
-helped. The code compiles, the routes render, and everything the screens read and write is
-covered by tests (`tests/admin.test.ts`) — but the signed-in UI itself has never been
-exercised against a real session. Treat the first login as a smoke test rather than a
-formality.
+The schema, the RLS policies and the business row are confirmed live on the hosted project.
+§9's RLS test was re-run against it with only the public key: reading `appointments`, inserting
+into `appointments` and reading `customers` all fail with `42501 permission denied`, while the
+public catalogue reads fine. Those denials are at the **grant** level, which is a harder stop
+than RLS filtering to zero rows.
 
-First run, in order:
+What has still never happened is a signed-in admin session — that needs an owner account, which
+only you can create. Treat the first login as a smoke test:
 
-1. `npm run db:migrate` against the project connection string.
-2. Supabase → Authentication → Add user, to create the owner.
-3. The `business_members` insert below, to link her to the business.
-4. Sign in at `/admin/login` and confirm Today renders.
+1. Supabase → Authentication → Add user, to create the owner.
+2. The `business_members` insert below, to link her to the business.
+3. Sign in at `/admin/login` and confirm Today renders.
 
-Everything else — the booking engine, availability, the public site, `/book`, `/b/[token]`
-— has been run against a real Postgres and a real HTTP server.
+Everything else — the booking engine, availability, the public site, `/book`, `/b/[token]` —
+has been run against a real Postgres and a real HTTP server.
 
 ### 5. There is no photography
 

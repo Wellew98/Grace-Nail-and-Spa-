@@ -20,6 +20,33 @@ export const getBusiness = cache(async (slug: string = BUSINESS_SLUG): Promise<B
   return queryOne<Business>('select * from businesses where slug = $1', [slug]);
 });
 
+/**
+ * Rows created by migration 0004_demo_data.sql all carry this id prefix.
+ * @see hasDemoData
+ */
+export const DEMO_ID_PREFIX = 'dddddddd-';
+
+/**
+ * Is the site currently showing placeholder treatments or therapists?
+ *
+ * Derived from the data rather than an environment flag, deliberately. A flag
+ * has to be remembered, and the failure direction is wrong: forget to set it and
+ * invented prices go out with nothing saying so. This answer becomes false the
+ * moment the demo rows are deleted, so the banner cannot outlive the data or be
+ * left off by mistake.
+ */
+export const hasDemoData = cache(async (businessId: string): Promise<boolean> => {
+  const rows = await query<{ present: boolean }>(
+    `select exists (
+       select 1 from services where business_id = $1 and id::text like $2
+       union all
+       select 1 from staff    where business_id = $1 and id::text like $2
+     ) as present`,
+    [businessId, `${DEMO_ID_PREFIX}%`],
+  );
+  return rows[0]?.present ?? false;
+});
+
 export const getActiveServices = cache(async (businessId: string): Promise<Service[]> => {
   return query<Service>(
     `select * from services

@@ -26,6 +26,10 @@ const MIGRATIONS = [
   'supabase/migrations/0001_init.sql',
   'supabase/migrations/0002_rls.sql',
   'supabase/migrations/0003_business.sql',
+  // Placeholder menu and therapists, so the site can be shown before the real
+  // ones arrive. Deploys on purpose, and the site shows a "Sample menu" banner
+  // for as long as these rows exist. Remove with `npm run db:demo-clear`.
+  'supabase/migrations/0004_demo_data.sql',
 ];
 
 /**

@@ -30,7 +30,9 @@ export default async function setup() {
   await db.query(sql('supabase/migrations/0001_init.sql'));
   await db.query(sql('supabase/migrations/0002_rls.sql'));
   await db.query(sql('supabase/migrations/0003_business.sql'));
-  // §10's example therapists and treatments. Test fixture only — never deployed.
+  // 0004_demo_data.sql is deliberately SKIPPED. It is data, not schema, and its
+  // placeholder menu would change the row counts and availability the §9
+  // assertions are pinned to. Tests use §10's fixture below instead.
   await db.query(sql('supabase/seed.sql'));
   await db.end();
 }
