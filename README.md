@@ -6,11 +6,19 @@ Tailwind, ZAR, `Africa/Johannesburg`.
 Built to `spabookingbuildspec1.md`. **Phases 1 and 2 only** — Google Calendar sync,
 WhatsApp reminders and deposits (Phases 3–5) are deliberately not built.
 
+**Deployed and working.** The site is on Vercel, the database is on Supabase, migrations
+deploy on push, and the admin has been signed into and confirmed. 79 tests pass against real
+Postgres.
+
+> **Continuing this project in a new session? Read [`docs/HANDOFF.md`](docs/HANDOFF.md)
+> first.** It carries the decisions that must not be casually reversed, the bugs already
+> fixed, and the one thing still blocking launch.
+
 ---
 
 ## Before this goes live
 
-NAP is real now. Four things still need the owner. Please read this section.
+One thing blocks launch. The rest is polish.
 
 ### 1. ⚠ The treatments and therapists are placeholders
 
@@ -75,23 +83,20 @@ the same week in **Admin → Setup** — hours hang off each therapist, not off 
 Public holidays are not modelled in hours; they belong in **Admin → Block**, which is what §3's
 `availability_blocks` table is for.
 
-### 4. The admin has not been signed into
+### 4. The admin — verified working ✅
 
-The schema, the RLS policies and the business row are confirmed live on the hosted project.
-§9's RLS test was re-run against it with only the public key: reading `appointments`, inserting
-into `appointments` and reading `customers` all fail with `42501 permission denied`, while the
-public catalogue reads fine. Those denials are at the **grant** level, which is a harder stop
-than RLS filtering to zero rows.
+Signed into on the live deployment. Reach it from the **Staff login** link in the site footer,
+or go to `/admin/login` directly.
 
-What has still never happened is a signed-in admin session — that needs an owner account, which
-only you can create. Treat the first login as a smoke test:
+The schema, RLS policies and business row are confirmed live. §9's RLS test was re-run against
+the hosted project with only the public key: reading `appointments`, inserting into
+`appointments` and reading `customers` all fail with `42501 permission denied`, while the public
+catalogue reads fine. Those denials are at the **grant** level, which is a harder stop than RLS
+filtering to zero rows.
 
-1. Supabase → Authentication → Add user, to create the owner.
-2. The `business_members` insert below, to link her to the business.
-3. Sign in at `/admin/login` and confirm Today renders.
-
-Everything else — the booking engine, availability, the public site, `/book`, `/b/[token]` —
-has been run against a real Postgres and a real HTTP server.
+To add another staff account later, repeat the steps under
+[Creating the owner account](#creating-the-owner-account) — the `business_members` insert is the
+step that is easy to forget, and without it a user signs in and sees nothing.
 
 ### 5. There is no photography
 
@@ -362,6 +367,16 @@ Recorded because each one would have been invisible in production for a while.
    mistake §12 warns about. The form now sends the wall clock and the server converts.
 6. **Seed UUIDs were not RFC 4122 conformant** and failed strict validation at the API
    boundary. Made them valid rather than loosening the validator.
+7. **`pg` was not declared a server external package**, so the build passed and the runtime
+   500s — the driver's optional `pg-native` / `pg-cloudflare` requires break in a serverless
+   bundle. This caused a live outage.
+8. **`middleware.ts` crashed the deployment** with `MIDDLEWARE_INVOCATION_FAILED`. Next 16
+   renamed the convention to `proxy.ts`; the old filename ran through a compatibility path.
+   It is now also wrapped so a failed token refresh costs an early logout, never a 500.
+9. **A test that never ran.** The health check's secret-key warning appeared to pass while
+   asserting against build-time-inlined values — `NEXT_PUBLIC_*` cannot be overridden at
+   runtime. That is why `lib/health.ts` is a pure function with unit tests rather than
+   something tested through a request.
 
 ---
 
@@ -374,17 +389,26 @@ app/
   b/[token]/                                        cancel + reschedule, no login
   admin/                                            today, week, walk-in, blocks, setup
   api/availability  api/bookings  api/manage/…      route handlers
+  api/health                                        is this deployment wired up?
+  global-error.tsx                                  when even the layout cannot render
+proxy.ts                                            refreshes the admin session (Next 16)
 lib/
   availability.ts     §4 — the slot algorithm
-  booking.ts          §5, §6 — write path, cancel, reschedule
+  booking.ts          §5, §6 — write path, cancel, reschedule; the advisory lock
   config-guards.ts    §7.1 — what happens to bookings already on the books
-  db.ts               pool, transactions, SQLSTATE handling
+  db.ts               pool, transactions, SQLSTATE handling, connection diagnosis
+  health.ts           the checks behind /api/health
+  site.ts             every word of prose, and the rule for what may be claimed
   time.ts             timezone conversion at the edges
 supabase/
-  migrations/         schema + RLS
-  seed.sql            §10
+  migrations/         schema, RLS, the business row, the placeholder menu
+  seed.sql            §10's example data — tests and local only, never deployed
   local/              test-only stubs for Supabase's auth roles
+scripts/
+  apply-migrations.mjs   npm run db:migrate
+  clear-demo-data.mjs    npm run db:demo-clear
 tests/                the §9 acceptance tests
+docs/HANDOFF.md       context for continuing in a new session
 ```
 
 ## Not built, by instruction
