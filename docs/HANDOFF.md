@@ -208,6 +208,34 @@ mistakes that actually cost time here:
 username and password — the driver parsed the password as part of the username and sent no
 password at all.
 
+### First question when a change is "not working": is it deployed?
+
+Spent a real amount of time on this. `/api/health` said `ok: true` and everything looked
+fine — because it was a **healthy deployment of month-old code**. Production was tracking
+`claude/project-doc-8cv2my` while the work was being pushed to a different branch, so
+nothing shipped and nothing complained.
+
+**Cheapest possible check:** hit `/api/health` and look for a key you know is new. If the
+field you just added is not in the response, you are looking at old code, and no amount of
+re-reading the configuration will help. Vercel's Deployment Details page states the branch
+and commit under **Source** — check that against `git log` before debugging anything else.
+
+### Vercel specifics that cost time
+
+- **The production branch is NOT under Settings → Git.** That page is webhooks, commit
+  statuses and LFS. It lives under **Settings → Environments → Production → Branch
+  Tracking**. Vercel moved it; older instructions everywhere still say Settings → Git.
+- **"Redeploy" rebuilds the SAME COMMIT.** It is a re-run, not a "deploy the latest".
+  Redeploying after changing the production branch just rebuilds the old code and looks
+  like the change silently failed. To ship newer code: push to the production branch, or
+  find that branch's deployment in the list and use **Promote to Production**.
+- **Environment variables do not apply to existing deployments.** They are bound at deploy
+  time, so a new variable needs a new deployment before any code can read it.
+- **Sensitive variables are write-only, and that is fine.** They work at runtime; you just
+  cannot read them back, only overwrite. Correct for `GMAIL_APP_PASSWORD` and
+  `SUPABASE_DB_URL`. On `NEXT_PUBLIC_*` it does nothing useful — those are inlined into the
+  browser bundle and public by definition.
+
 ---
 
 ## 8. Known environment quirks (this container)
