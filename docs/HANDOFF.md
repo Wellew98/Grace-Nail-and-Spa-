@@ -367,3 +367,85 @@ operator/responsible-party relationship should be **one page in writing**. The s
 says that is the relationship. Nothing has been signed.
 
 This is not legal advice. It is the set of things that are obviously right and cost nothing.
+
+---
+
+## 12. Transactional email — why it is not Resend (yet)
+
+Clears launch-gate item v2 §1.2. **This is a deliberate deviation from spec §16**, which
+names `RESEND_API_KEY`. Read this before "fixing" it back.
+
+### The problem
+
+Resend will only send from a domain you have verified. **The spa does not own one** — the
+Google Business Profile carries no email address either, and the site is on a
+`vercel.app` address. §1.2 is blocking, and blocking a launch on a domain purchase is the
+wrong trade when a free path exists that works today.
+
+§1.2's actual requirement is "transactional email configured". The provider is an
+implementation detail; the spec assumed a domain would exist.
+
+### The shape
+
+`lib/mail.ts` is a transport seam. `lib/email.ts` composes messages and knows nothing about
+who sends them.
+
+```
+MAIL_TRANSPORT=gmail|resend     optional — inferred from what is set
+  gmail    GMAIL_USER, GMAIL_APP_PASSWORD
+  resend   RESEND_API_KEY, BOOKING_FROM_EMAIL
+  both     OWNER_NOTIFICATION_EMAIL
+```
+
+**The day a domain is verified, switching is environment variables only.** Nothing in the
+message composition changes. That was the whole point of building it this way rather than
+swapping nodemailer in and calling it done.
+
+Inference prefers **gmail** when both are configured, so adding Resend's variables during a
+migration cannot silently change the sender address customers see. Set `MAIL_TRANSPORT`
+explicitly to make the switch.
+
+### Why Gmail SMTP and not the alternatives
+
+- **Not the Gmail API.** `gmail.send` is a Google-classed *sensitive* scope. In an
+  unpublished project the refresh token expires after **seven days**, so email would die
+  every week; avoiding that means submitting for Google's verification review. Zapier and
+  Make get away with it because they passed that review once, as a large verified app, and
+  you grant *their* app access. An app password over SMTP reaches the identical mailbox
+  with none of it.
+- **Not Brevo/SendGrid/Mailjet single-sender.** They will all verify a lone `@gmail.com`
+  address without a domain. It is a trap: mail then leaves *their* servers claiming to be
+  *from* gmail.com, failing SPF and DKIM alignment against Gmail's own DMARC record. Same
+  work, worse deliverability, and it is the exact pattern the 2024 Google/Yahoo bulk-sender
+  rules keep tightening on.
+- **Gmail through Gmail aligns perfectly** and is the most deliverable free option.
+
+An App Password needs 2-Step Verification on the account. It is 16 characters — Google
+shows it in four groups of four, and `/api/health` rejects anything that is not 16, because
+the common mistake is pasting the account password and Gmail's rejection says nothing
+useful.
+
+### Two things that were fixed alongside, and matter more than the provider
+
+**Sends moved off the response path.** They used to be `await`ed before the booking
+response returned. That was fine against an HTTP API and would not have been against SMTP —
+a STARTTLS handshake is seconds, and §3 is "book in under 60 seconds". All four routes now
+dispatch through `after()` from `next/server`, which runs the work once the response is
+sent and keeps the function alive to finish it. **Verified: a booking returns 201 in 80ms
+with a completely unreachable SMTP server.**
+
+**SMTP timeouts are bounded.** nodemailer defaults to two minutes. Combined with `after()`
+keeping the function alive, an unreachable host would hold a serverless function open for
+the full two minutes to deliver an email that was never going to arrive. Now 10s connect,
+10s greeting, 15s socket. Failing fast costs a log line; the booking is already committed
+and already answered.
+
+### /api/health knows which transport it is on
+
+It reports only the variables the selected transport actually uses — Resend's variables on
+a Gmail deployment would be noise plus one false alarm. With nothing configured it says so
+in as many words, and names both ways out.
+
+This is the one endpoint that can break the silence: `lib/email.ts` never throws into the
+write path, which is correct, and the cost of that correctness is that a broken mailer is
+otherwise completely invisible.

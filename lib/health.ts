@@ -12,24 +12,22 @@
  * otherwise use is one of the things that might be broken.
  */
 
+import { bareAddress, selectedTransport } from './mail';
+
 export interface Check {
   ok: boolean;
   detail: string;
 }
 
-export type EnvName =
-  | 'NEXT_PUBLIC_SUPABASE_URL'
-  | 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
-  | 'SUPABASE_DB_URL'
-  | 'NEXT_PUBLIC_SITE_URL'
-  | 'RESEND_API_KEY'
-  | 'BOOKING_FROM_EMAIL'
-  | 'OWNER_NOTIFICATION_EMAIL';
-
 /** Just the shape this reads. NodeJS.ProcessEnv demands NODE_ENV, which is noise here. */
 export type EnvLike = Record<string, string | undefined>;
 
-export function checkEnvironment(env: EnvLike = process.env): Record<EnvName, Check> {
+/**
+ * Keys are not a fixed set: which email variables are reported depends on
+ * which mail transport the deployment selected. Reporting Resend's variables
+ * on a Gmail deployment would be four lines of noise and one false alarm.
+ */
+export function checkEnvironment(env: EnvLike = process.env): Record<string, Check> {
   const publishable = env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
   const dbUrl = env.SUPABASE_DB_URL;
@@ -52,26 +50,92 @@ export function checkEnvironment(env: EnvLike = process.env): Record<EnvName, Ch
         : { ok: true, detail: 'set' }
       : { ok: false, detail: 'missing — confirmation links and JSON-LD need an absolute URL' },
 
-    RESEND_API_KEY: checkResendKey(env.RESEND_API_KEY),
-    BOOKING_FROM_EMAIL: checkFromEmail(env.BOOKING_FROM_EMAIL),
-    OWNER_NOTIFICATION_EMAIL: checkOwnerEmail(env.OWNER_NOTIFICATION_EMAIL),
+    ...emailChecks(env),
   };
 }
 
 /**
- * The three email variables — spec §1.2, which calls this blocking.
+ * The mail configuration — spec §1.2, which calls this blocking.
  *
- * WHY THESE ARE CHECKED HERE AT ALL. `lib/email.ts` is best-effort by design:
- * it must never throw into the booking write path, because a booking safely in
- * the database must not be reported as a failure just because a provider had a
- * bad minute — the customer would rebook and the spa would have two
+ * WHY THIS IS CHECKED AT ALL. `lib/email.ts` is best-effort and never throws
+ * into the booking write path, which is correct: a booking safely in the
+ * database must not be reported as a failure because a provider had a bad
+ * minute, or the customer would rebook and the spa would have two
  * appointments. The cost of that correct decision is that a misconfigured
  * mailer is *completely silent*. The customer books, receives nothing, and
- * phones to check, which is worse than having no system at all.
+ * phones to check — which §1.2 rightly calls worse than having no system.
  *
- * So the only place that silence can be broken is here. §16 — "GET /api/health
- * first, always" — is the habit this relies on.
+ * So this endpoint is the only place that silence gets broken, and §16's
+ * "GET /api/health first, always" is the habit it relies on.
  */
+function emailChecks(env: EnvLike): Record<string, Check> {
+  const transport = selectedTransport(env);
+  const owner = { OWNER_NOTIFICATION_EMAIL: checkOwnerEmail(env.OWNER_NOTIFICATION_EMAIL) };
+
+  if (transport === 'gmail') {
+    return {
+      MAIL_TRANSPORT: { ok: true, detail: 'gmail — sending over SMTP as the Gmail account below' },
+      GMAIL_USER: checkGmailUser(env.GMAIL_USER),
+      GMAIL_APP_PASSWORD: checkGmailAppPassword(env.GMAIL_APP_PASSWORD),
+      ...owner,
+    };
+  }
+
+  if (transport === 'resend') {
+    return {
+      MAIL_TRANSPORT: { ok: true, detail: 'resend — sending over the Resend API' },
+      RESEND_API_KEY: checkResendKey(env.RESEND_API_KEY),
+      BOOKING_FROM_EMAIL: checkFromEmail(env.BOOKING_FROM_EMAIL),
+      ...owner,
+    };
+  }
+
+  return {
+    MAIL_TRANSPORT: {
+      ok: false,
+      detail:
+        'no mail transport configured — NO email is sent at all. Bookings still save, and ' +
+        'neither the customer nor the owner is told. Set GMAIL_USER + GMAIL_APP_PASSWORD ' +
+        '(free, no domain needed), or RESEND_API_KEY + BOOKING_FROM_EMAIL (needs a verified ' +
+        'domain).',
+    },
+    ...owner,
+  };
+}
+
+function checkGmailUser(user: string | undefined): Check {
+  if (!user) return { ok: false, detail: 'missing — the Gmail address to send from' };
+  if (!looksLikeEmail(bareAddress(user))) {
+    return { ok: false, detail: 'set, but is not an email address' };
+  }
+  return { ok: true, detail: 'set, and shaped like an address' };
+}
+
+function checkGmailAppPassword(password: string | undefined): Check {
+  if (!password) {
+    return {
+      ok: false,
+      detail:
+        'missing — generate one at Google Account > Security > App passwords. Requires 2-Step ' +
+        'Verification on the account.',
+    };
+  }
+
+  // Google issues these as 16 characters, shown in four groups of four. An
+  // account password pasted here instead is the common mistake, and Gmail
+  // rejects it with a generic auth failure that says nothing useful.
+  const stripped = password.replace(/\s+/g, '');
+  if (stripped.length !== 16) {
+    return {
+      ok: false,
+      detail:
+        'set, but a Google App Password is 16 characters. This looks like the account password, ' +
+        'which SMTP will reject.',
+    };
+  }
+  return { ok: true, detail: 'set, and shaped like a Google App Password' };
+}
+
 function checkResendKey(key: string | undefined): Check {
   if (!key) {
     return {
@@ -85,11 +149,6 @@ function checkResendKey(key: string | undefined): Check {
     return { ok: false, detail: 'set, but a Resend API key starts with re_' };
   }
   return { ok: true, detail: 'set, and shaped like a Resend API key' };
-}
-
-/** Accepts a bare address or the `Name <addr@domain>` form Resend also takes. */
-function emailAddress(value: string): string {
-  return value.match(/<([^>]+)>/)?.[1]?.trim() ?? value.trim();
 }
 
 function looksLikeEmail(value: string): boolean {
@@ -111,7 +170,7 @@ function checkFromEmail(value: string | undefined): Check {
     };
   }
 
-  const address = emailAddress(value);
+  const address = bareAddress(value);
   if (!looksLikeEmail(address)) {
     return { ok: false, detail: 'set, but is not an email address' };
   }
@@ -140,7 +199,7 @@ function checkOwnerEmail(value: string | undefined): Check {
         'still emailed; she is not.',
     };
   }
-  return looksLikeEmail(emailAddress(value))
+  return looksLikeEmail(bareAddress(value))
     ? { ok: true, detail: 'set' }
     : { ok: false, detail: 'set, but is not an email address' };
 }

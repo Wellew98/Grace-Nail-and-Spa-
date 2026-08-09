@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { cancelBooking, getAppointmentByToken } from '@/lib/booking';
 import { sendCancellationNotice } from '@/lib/email';
 
@@ -28,6 +28,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
     );
   }
 
-  await sendCancellationNotice(appointment);
+  // After the response: the customer has cancelled and should see that
+  // immediately, whatever the mail server is doing.
+  after(async () => {
+    await sendCancellationNotice(appointment);
+  });
   return NextResponse.json({ ok: true });
 }

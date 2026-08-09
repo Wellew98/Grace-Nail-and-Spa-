@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { forgetCustomer, getAppointmentByToken } from '@/lib/booking';
 import { sendCancellationNotice } from '@/lib/email';
 
@@ -37,9 +37,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
   // appointments vanished from her diary and who they were, because otherwise
   // she finds an unexplained gap on a Saturday. This is the last processing of
   // those details, and it is what completes the cancellation.
-  for (const cancelled of result.cancelled) {
-    await sendCancellationNotice(cancelled);
-  }
+  after(async () => {
+    for (const cancelled of result.cancelled) {
+      await sendCancellationNotice(cancelled);
+    }
+  });
 
   return NextResponse.json({
     ok: true,

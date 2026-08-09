@@ -1,24 +1,27 @@
 import 'server-only';
-import { Resend } from 'resend';
+import { getTransport } from './mail';
 import { formatZar } from './money';
 import { formatPhoneForDisplay } from './phone';
 import { formatDateTimeLabel } from './time';
 import type { AppointmentDetail } from './booking';
 
 /**
- * Transactional email — spec §8 Phase 2: confirmation to the customer and a
+ * Transactional email — spec §7 step 12: confirmation to the customer and a
  * notification to the owner.
+ *
+ * WHAT GOES IN THE MESSAGE lives here. WHO PUTS IT ON THE WIRE lives in
+ * `lib/mail.ts`, because the spa has no verified domain yet and the provider
+ * therefore has to be swappable. Nothing in this file knows which one is in
+ * use.
  *
  * Sending is best-effort and deliberately never throws into the write path. A
  * booking that is safely in the database must not be reported as a failure
- * because an email provider had a bad minute; the customer would rebook and we
- * would have two appointments. Failures are logged for the owner to chase.
+ * because a mail provider had a bad minute; the customer would rebook and the
+ * spa would have two appointments. Failures are logged for the owner to chase.
+ *
+ * Callers dispatch these through `next/server`'s `after()`, so a slow mailer
+ * cannot delay the booking response — see `app/api/bookings/route.ts`.
  */
-
-function client(): Resend | null {
-  const key = process.env.RESEND_API_KEY;
-  return key ? new Resend(key) : null;
-}
 
 /**
  * What may be written to the log when a send fails — spec §9.5, "no personal
@@ -42,7 +45,6 @@ function safeError(error: unknown): { message: string; status?: number } {
   return { message: 'unknown error' };
 }
 
-const FROM = process.env.BOOKING_FROM_EMAIL ?? 'bookings@example.com';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
 function manageUrl(token: string): string {
@@ -74,79 +76,78 @@ function detailRows(appointment: AppointmentDetail): string {
     </table>`;
 }
 
-export async function sendCustomerConfirmation(appointment: AppointmentDetail): Promise<void> {
-  const resend = client();
-  if (!resend || !appointment.customer_email) return;
+/**
+ * The single place a send is attempted. Swallows everything, by design — see
+ * the note at the top of this file.
+ */
+async function deliver(
+  what: string,
+  appointment: AppointmentDetail,
+  to: string | undefined | null,
+  subject: string,
+  html: string,
+): Promise<void> {
+  const transport = getTransport();
+  // No mailer configured is a normal state before §1.2 is done, and no
+  // recipient simply means this message has nobody to go to — the email field
+  // on /book is optional. Neither is an error worth logging on every booking.
+  if (!transport || !to) return;
 
-  const url = manageUrl(appointment.manage_token);
   try {
-    await resend.emails.send({
-      from: FROM,
-      to: appointment.customer_email,
-      subject: `Your booking at ${appointment.business_name}`,
-      html: layout(
-        `You're booked in, ${escapeHtml(appointment.customer_name.split(' ')[0])}`,
-        `${detailRows(appointment)}
-         <p style="margin:20px 0 0;font-size:14px;line-height:1.6">
-           Need to move or cancel it?
-           <a href="${url}" style="color:#c2185b">Manage your booking</a>.
-         </p>
-         <p style="margin:16px 0 0;font-size:12px;color:#9b7f94">
-           ${escapeHtml(appointment.business_name)} · ${escapeHtml(formatPhoneForDisplay(appointment.business_phone))}
-         </p>`,
-      ),
-    });
+    await transport.send({ to, subject, html, fromName: appointment.business_name });
   } catch (error) {
-    console.error('[email] customer confirmation failed', {
+    console.error(`[email] ${what} failed`, {
       appointmentId: appointment.id,
+      transport: transport.name,
       ...safeError(error),
     });
   }
+}
+
+export async function sendCustomerConfirmation(appointment: AppointmentDetail): Promise<void> {
+  const url = manageUrl(appointment.manage_token);
+  await deliver(
+    'customer confirmation',
+    appointment,
+    appointment.customer_email,
+    `Your booking at ${appointment.business_name}`,
+    layout(
+      `You're booked in, ${escapeHtml(appointment.customer_name.split(' ')[0])}`,
+      `${detailRows(appointment)}
+       <p style="margin:20px 0 0;font-size:14px;line-height:1.6">
+         Need to move or cancel it?
+         <a href="${url}" style="color:#c2185b">Manage your booking</a>.
+       </p>
+       <p style="margin:16px 0 0;font-size:12px;color:#9b7f94">
+         ${escapeHtml(appointment.business_name)} · ${escapeHtml(formatPhoneForDisplay(appointment.business_phone))}
+       </p>`,
+    ),
+  );
 }
 
 export async function sendOwnerNotification(appointment: AppointmentDetail): Promise<void> {
-  const resend = client();
-  const to = process.env.OWNER_NOTIFICATION_EMAIL;
-  if (!resend || !to) return;
-
-  try {
-    await resend.emails.send({
-      from: FROM,
-      to,
-      subject: `New booking — ${appointment.service_name}, ${appointment.staff_name}`,
-      html: layout(
-        'New booking',
-        `${detailRows(appointment)}
-         <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px">
-           <tr><td style="padding:6px 0;color:#7a5a72">Customer</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.customer_name)}</td></tr>
-           <tr><td style="padding:6px 0;color:#7a5a72">Phone</td><td style="padding:6px 0;text-align:right">${escapeHtml(formatPhoneForDisplay(appointment.customer_phone))}</td></tr>
-         </table>`,
-      ),
-    });
-  } catch (error) {
-    console.error('[email] owner notification failed', {
-      appointmentId: appointment.id,
-      ...safeError(error),
-    });
-  }
+  await deliver(
+    'owner notification',
+    appointment,
+    process.env.OWNER_NOTIFICATION_EMAIL,
+    `New booking — ${appointment.service_name}, ${appointment.staff_name}`,
+    layout(
+      'New booking',
+      `${detailRows(appointment)}
+       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px">
+         <tr><td style="padding:6px 0;color:#7a5a72">Customer</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.customer_name)}</td></tr>
+         <tr><td style="padding:6px 0;color:#7a5a72">Phone</td><td style="padding:6px 0;text-align:right">${escapeHtml(formatPhoneForDisplay(appointment.customer_phone))}</td></tr>
+       </table>`,
+    ),
+  );
 }
 
 export async function sendCancellationNotice(appointment: AppointmentDetail): Promise<void> {
-  const resend = client();
-  const to = process.env.OWNER_NOTIFICATION_EMAIL;
-  if (!resend || !to) return;
-
-  try {
-    await resend.emails.send({
-      from: FROM,
-      to,
-      subject: `Cancelled — ${appointment.service_name}, ${appointment.staff_name}`,
-      html: layout('Booking cancelled', detailRows(appointment)),
-    });
-  } catch (error) {
-    console.error('[email] cancellation notice failed', {
-      appointmentId: appointment.id,
-      ...safeError(error),
-    });
-  }
+  await deliver(
+    'cancellation notice',
+    appointment,
+    process.env.OWNER_NOTIFICATION_EMAIL,
+    `Cancelled — ${appointment.service_name}, ${appointment.staff_name}`,
+    layout('Booking cancelled', detailRows(appointment)),
+  );
 }
