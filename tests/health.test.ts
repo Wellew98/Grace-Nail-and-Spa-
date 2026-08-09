@@ -16,6 +16,9 @@ const good = {
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_abc123',
   SUPABASE_DB_URL: 'postgresql://postgres.ref:pw@aws-0-eu-west-1.pooler.supabase.com:6543/postgres',
   NEXT_PUBLIC_SITE_URL: 'https://spa-two.vercel.app',
+  RESEND_API_KEY: 're_abc123',
+  BOOKING_FROM_EMAIL: 'bookings@gracenails.co.za',
+  OWNER_NOTIFICATION_EMAIL: 'grace@gracenails.co.za',
 } satisfies EnvLike;
 
 describe('a correctly configured deployment', () => {
@@ -115,5 +118,74 @@ describe('the project URL', () => {
       checkEnvironment({ ...good, NEXT_PUBLIC_SUPABASE_URL: 'https://abc123.supabase.co/' })
         .NEXT_PUBLIC_SUPABASE_URL.ok,
     ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The email variables (§1.2, blocking).
+//
+// lib/email.ts is best-effort and never throws into the booking write path,
+// which is correct — but the cost is that a misconfigured mailer is completely
+// silent. These checks are the only place that silence gets broken, so each
+// one is pinned to the specific mistake it exists to catch.
+// ---------------------------------------------------------------------------
+describe('the email configuration', () => {
+  it('says plainly that a missing API key means no email at all', () => {
+    const check = checkEnvironment({ ...good, RESEND_API_KEY: undefined }).RESEND_API_KEY;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/NO email/i);
+  });
+
+  it('rejects a key that is not a Resend key', () => {
+    const check = checkEnvironment({ ...good, RESEND_API_KEY: 'SG.sendgrid_key' }).RESEND_API_KEY;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/re_/);
+  });
+
+  // The trap: a valid key plus no sender is the configuration that looks done
+  // and delivers nothing, because the fallback domain cannot be verified.
+  it('catches a missing sender, which fails every send despite a valid key', () => {
+    const check = checkEnvironment({ ...good, BOOKING_FROM_EMAIL: undefined }).BOOKING_FROM_EMAIL;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/example\.com/);
+    expect(check.detail).toMatch(/every send fails/i);
+  });
+
+  it('catches the example address being set explicitly', () => {
+    const check = checkEnvironment({
+      ...good,
+      BOOKING_FROM_EMAIL: 'bookings@example.com',
+    }).BOOKING_FROM_EMAIL;
+    expect(check.ok).toBe(false);
+  });
+
+  it('rejects the resend.dev test sender, which never reaches a customer', () => {
+    const check = checkEnvironment({
+      ...good,
+      BOOKING_FROM_EMAIL: 'onboarding@resend.dev',
+    }).BOOKING_FROM_EMAIL;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/only delivers to your own account/i);
+  });
+
+  it('accepts the "Name <addr>" form Resend also takes', () => {
+    const check = checkEnvironment({
+      ...good,
+      BOOKING_FROM_EMAIL: 'Grace Nails <bookings@gracenails.co.za>',
+    }).BOOKING_FROM_EMAIL;
+    expect(check.ok).toBe(true);
+  });
+
+  it('rejects a sender that is not an address at all', () => {
+    const check = checkEnvironment({ ...good, BOOKING_FROM_EMAIL: 'Grace Nails' })
+      .BOOKING_FROM_EMAIL;
+    expect(check.ok).toBe(false);
+  });
+
+  it('notes that a missing owner address leaves her uninformed, not the customer', () => {
+    const check = checkEnvironment({ ...good, OWNER_NOTIFICATION_EMAIL: undefined })
+      .OWNER_NOTIFICATION_EMAIL;
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/owner is not told/i);
   });
 });

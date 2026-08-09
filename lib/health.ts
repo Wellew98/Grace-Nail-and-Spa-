@@ -21,7 +21,10 @@ export type EnvName =
   | 'NEXT_PUBLIC_SUPABASE_URL'
   | 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY'
   | 'SUPABASE_DB_URL'
-  | 'NEXT_PUBLIC_SITE_URL';
+  | 'NEXT_PUBLIC_SITE_URL'
+  | 'RESEND_API_KEY'
+  | 'BOOKING_FROM_EMAIL'
+  | 'OWNER_NOTIFICATION_EMAIL';
 
 /** Just the shape this reads. NodeJS.ProcessEnv demands NODE_ENV, which is noise here. */
 export type EnvLike = Record<string, string | undefined>;
@@ -48,7 +51,98 @@ export function checkEnvironment(env: EnvLike = process.env): Record<EnvName, Ch
         ? { ok: false, detail: 'still points at localhost — booking confirmation links would go nowhere' }
         : { ok: true, detail: 'set' }
       : { ok: false, detail: 'missing — confirmation links and JSON-LD need an absolute URL' },
+
+    RESEND_API_KEY: checkResendKey(env.RESEND_API_KEY),
+    BOOKING_FROM_EMAIL: checkFromEmail(env.BOOKING_FROM_EMAIL),
+    OWNER_NOTIFICATION_EMAIL: checkOwnerEmail(env.OWNER_NOTIFICATION_EMAIL),
   };
+}
+
+/**
+ * The three email variables — spec §1.2, which calls this blocking.
+ *
+ * WHY THESE ARE CHECKED HERE AT ALL. `lib/email.ts` is best-effort by design:
+ * it must never throw into the booking write path, because a booking safely in
+ * the database must not be reported as a failure just because a provider had a
+ * bad minute — the customer would rebook and the spa would have two
+ * appointments. The cost of that correct decision is that a misconfigured
+ * mailer is *completely silent*. The customer books, receives nothing, and
+ * phones to check, which is worse than having no system at all.
+ *
+ * So the only place that silence can be broken is here. §16 — "GET /api/health
+ * first, always" — is the habit this relies on.
+ */
+function checkResendKey(key: string | undefined): Check {
+  if (!key) {
+    return {
+      ok: false,
+      detail:
+        'missing — NO email is sent at all. Bookings still save, and neither the customer nor ' +
+        'the owner is told. Resend > API Keys.',
+    };
+  }
+  if (!key.startsWith('re_')) {
+    return { ok: false, detail: 'set, but a Resend API key starts with re_' };
+  }
+  return { ok: true, detail: 'set, and shaped like a Resend API key' };
+}
+
+/** Accepts a bare address or the `Name <addr@domain>` form Resend also takes. */
+function emailAddress(value: string): string {
+  return value.match(/<([^>]+)>/)?.[1]?.trim() ?? value.trim();
+}
+
+function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function checkFromEmail(value: string | undefined): Check {
+  // The trap this check exists for. lib/email.ts falls back to
+  // bookings@example.com, which is a domain nobody can verify, so Resend
+  // rejects EVERY send with a 403 — while the key itself is perfectly valid.
+  // Set the key and forget this one and the system looks configured and
+  // delivers nothing.
+  if (!value) {
+    return {
+      ok: false,
+      detail:
+        'missing — the fallback sender is bookings@example.com, which Resend refuses, so every ' +
+        'send fails even with a valid API key. Must be an address on a domain verified in Resend.',
+    };
+  }
+
+  const address = emailAddress(value);
+  if (!looksLikeEmail(address)) {
+    return { ok: false, detail: 'set, but is not an email address' };
+  }
+  if (/@example\.(com|org|net)$/i.test(address)) {
+    return { ok: false, detail: 'still the example address — Resend will refuse every send' };
+  }
+  // Resend's shared test sender only delivers to the account holder's own
+  // address. Fine for a smoke test, useless to a customer.
+  if (/@resend\.dev$/i.test(address)) {
+    return {
+      ok: false,
+      detail:
+        'this is Resend\'s test sender. It only delivers to your own account address, so real ' +
+        'customers receive nothing. Verify the spa\'s domain and send from that.',
+    };
+  }
+  return { ok: true, detail: 'set, and shaped like an address on a real domain' };
+}
+
+function checkOwnerEmail(value: string | undefined): Check {
+  if (!value) {
+    return {
+      ok: false,
+      detail:
+        'missing — the owner is not told about new bookings or cancellations. Customers are ' +
+        'still emailed; she is not.',
+    };
+  }
+  return looksLikeEmail(emailAddress(value))
+    ? { ok: true, detail: 'set' }
+    : { ok: false, detail: 'set, but is not an email address' };
 }
 
 function checkPublishableKey(key: string | undefined): Check {
