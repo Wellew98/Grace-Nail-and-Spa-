@@ -97,3 +97,29 @@ describe('bareAddress', () => {
     expect(bareAddress('  a@b.co.za  ')).toBe('a@b.co.za');
   });
 });
+
+describe('verifying credentials', () => {
+  // The point of verify() is that shape checks cannot catch a wrong password.
+  // Only Gmail offers a check that does not send a message; Resend does not,
+  // and saying so is better than implying it was checked.
+  it('is offered for gmail and not for resend', () => {
+    expect(typeof getTransport(gmail)?.verify).toBe('function');
+    expect(getTransport(resend)?.verify).toBeUndefined();
+  });
+
+  it('reports a failure rather than throwing, so /api/health survives it', async () => {
+    // These credentials are not real, so this fails one way or another —
+    // rejected by Gmail where the network allows it, or timed out at the 10s
+    // bound where it does not. Either way the contract under test is the same:
+    // verify() RETURNS a failure, and /api/health stays up to report it.
+    const transport = getTransport({
+      GMAIL_USER: 'spa@gmail.com',
+      GMAIL_APP_PASSWORD: 'abcdefghijklmnop',
+    });
+
+    const result = await transport!.verify!();
+    expect(result.ok).toBe(false);
+    // Never leaks the credential, whatever went wrong.
+    expect(result.detail).not.toContain('abcdefghijklmnop');
+  }, 30_000);
+});

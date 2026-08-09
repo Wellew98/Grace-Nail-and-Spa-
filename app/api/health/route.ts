@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPool } from '@/lib/db';
 import { checkEnvironment, type Check } from '@/lib/health';
+import { getTransport } from '@/lib/mail';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,10 +38,53 @@ async function databaseCheck(): Promise<Check & { businessName?: string; treatme
   }
 }
 
-export async function GET() {
+/**
+ * Does the mail provider actually accept these credentials?
+ *
+ * OPT-IN, via `?verify=mail`, for two reasons. It costs an SMTP round trip,
+ * and this endpoint is the thing you open when the site is down — it should
+ * stay fast. And a Gmail account with an aggressive security posture may treat
+ * repeated authentication attempts as worth an alert, which is not something
+ * to trigger on every health poll.
+ *
+ * Worth having at all because the default checks are shape-only: they will
+ * happily confirm an App Password is 16 characters while Gmail rejects those
+ * particular 16. Since `lib/email.ts` never throws into the write path, the
+ * first symptom of that would be an email that silently never arrives — the
+ * exact failure §1.2 calls worse than having no system.
+ */
+async function mailCheck(): Promise<Check> {
+  const transport = getTransport();
+  if (!transport) {
+    return { ok: false, detail: 'no mail transport configured — nothing to verify' };
+  }
+  if (!transport.verify) {
+    return {
+      ok: true,
+      detail: `${transport.name} offers no credential check that does not send a message — not verified`,
+    };
+  }
+  try {
+    return await transport.verify();
+  } catch (error) {
+    // verify() is meant to return rather than throw; if it throws anyway, that
+    // must not take down the one endpoint used to diagnose everything else.
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, detail: `could not check the mail credentials: ${message}` };
+  }
+}
+
+export async function GET(request: Request) {
+  const verifyMail = new URL(request.url).searchParams.get('verify') === 'mail';
+
   const environment = checkEnvironment();
-  const database = await databaseCheck();
-  const ok = Object.values(environment).every((c) => c.ok) && database.ok;
+  const [database, mail] = await Promise.all([
+    databaseCheck(),
+    verifyMail ? mailCheck() : Promise.resolve(null),
+  ]);
+
+  const ok =
+    Object.values(environment).every((c) => c.ok) && database.ok && (mail ? mail.ok : true);
 
   return NextResponse.json(
     {
@@ -48,7 +92,11 @@ export async function GET() {
       summary: ok ? 'Everything is wired up.' : 'Something is not configured. See the entries marked ok: false.',
       environment,
       database,
+      ...(mail ? { mail } : {}),
       hint: 'NEXT_PUBLIC_* values are baked in at build time. After changing them, redeploy.',
+      ...(verifyMail
+        ? {}
+        : { tip: 'Add ?verify=mail to also ask the mail provider whether the credentials work.' }),
     },
     { status: ok ? 200 : 503, headers: { 'Cache-Control': 'no-store' } },
   );

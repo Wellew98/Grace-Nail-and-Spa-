@@ -446,6 +446,19 @@ It reports only the variables the selected transport actually uses — Resend's 
 a Gmail deployment would be noise plus one false alarm. With nothing configured it says so
 in as many words, and names both ways out.
 
+**`GET /api/health?verify=mail`** goes further and asks Gmail whether the credentials
+actually work, over a real SMTP handshake with no message sent. The default checks are
+shape-only: they will confirm an App Password is 16 characters while Gmail rejects those
+particular 16, and the first symptom would be an email that silently never arrives. A 535
+is translated into the three things that actually cause it — account password pasted
+instead of an App Password, password belonging to a different account than `GMAIL_USER`, or
+2-Step Verification switched off, which revokes App Passwords.
+
+Opt-in rather than default for two reasons: it costs an SMTP round trip on the endpoint you
+open when the site is down, and repeated authentication attempts are the sort of thing a
+Google account can decide to alert on. Resend has no equivalent check that does not send a
+message, so it reports "not verified" rather than implying otherwise.
+
 This is the one endpoint that can break the silence: `lib/email.ts` never throws into the
 write path, which is correct, and the cost of that correctness is that a broken mailer is
 otherwise completely invisible.

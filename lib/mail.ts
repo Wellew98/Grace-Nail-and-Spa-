@@ -49,6 +49,21 @@ export interface MailTransport {
   /** The bare address mail leaves from. Never a value to log. */
   readonly from: string;
   send(message: Message): Promise<void>;
+  /**
+   * Ask the provider whether these credentials actually work, without sending
+   * anything. Null when the provider offers no way to check cheaply.
+   *
+   * Exists because shape checks are not enough: `/api/health` can confirm an
+   * App Password is 16 characters and still be looking at 16 wrong ones. The
+   * first symptom would otherwise be an email that silently never arrives,
+   * which is the exact failure §1.2 is about.
+   */
+  verify?(): Promise<VerifyResult>;
+}
+
+export interface VerifyResult {
+  ok: boolean;
+  detail: string;
 }
 
 export type EnvLike = Record<string, string | undefined>;
@@ -110,6 +125,66 @@ export function getTransport(env: EnvLike = process.env): MailTransport | null {
   }
 }
 
+/**
+ * Turn a provider's failure into something a person can act on.
+ *
+ * SMTP rejections are numeric codes wrapped in marketing URLs; "535-5.7.8
+ * Username and Password not accepted" does not tell the reader that they most
+ * likely pasted their account password. Anything unrecognised is passed
+ * through as-is rather than flattened, since an unknown failure is exactly
+ * when the raw text is worth having.
+ *
+ * Never includes the credential: nodemailer reports the server's response, not
+ * what was sent to it.
+ */
+function explainSmtpFailure(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+
+  if (/Invalid login|535|Username and Password not accepted/i.test(raw)) {
+    return (
+      'Gmail rejected the credentials. Either GMAIL_APP_PASSWORD is not a valid App Password ' +
+      '(the account password will not work), or it belongs to a different account than ' +
+      'GMAIL_USER, or 2-Step Verification is off so the App Password has been revoked.'
+    );
+  }
+
+  if (/timeout|ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i.test(raw)) {
+    return `Could not reach smtp.gmail.com — ${raw}`;
+  }
+
+  return raw;
+}
+
+/**
+ * Shared by `send` and `verify`, so what is verified is exactly what sends.
+ *
+ * Timeouts are bounded deliberately. nodemailer defaults to two minutes, and
+ * sends run inside `after()` — which keeps the serverless function alive until
+ * they finish. An unreachable SMTP host would therefore hold a function open
+ * for the full two minutes, burning execution time and risking the platform's
+ * max duration, to deliver an email that was never going to arrive. Ten
+ * seconds is far more than a healthy Gmail handshake needs, and failing fast
+ * costs only a log line: the booking is already committed and already
+ * answered.
+ */
+function gmailOptions(user: string, pass: string) {
+  return {
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // STARTTLS on 587. Port 465 is the implicit-TLS one.
+    auth: {
+      user,
+      // Google removed "less secure app" passwords; this is an App Password,
+      // which requires 2-Step Verification on the account and is the supported
+      // way to authenticate SMTP.
+      pass: pass.replace(/\s+/g, ''), // Google displays it in four groups of four.
+    },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
+  };
+}
+
 function gmailTransport(env: EnvLike): MailTransport | null {
   const user = env.GMAIL_USER;
   const pass = env.GMAIL_APP_PASSWORD;
@@ -118,34 +193,26 @@ function gmailTransport(env: EnvLike): MailTransport | null {
   return {
     name: 'gmail',
     from: user,
+
+    async verify() {
+      const nodemailer = (await import('nodemailer')).default;
+      const transporter = nodemailer.createTransport(gmailOptions(user, pass));
+      try {
+        // Opens the connection, does STARTTLS and AUTH, then stops. No message.
+        await transporter.verify();
+        return { ok: true, detail: 'Gmail accepted these credentials' };
+      } catch (error) {
+        return { ok: false, detail: explainSmtpFailure(error) };
+      } finally {
+        transporter.close();
+      }
+    },
+
     async send(message) {
       // Imported lazily so a Resend deployment never loads nodemailer, and so
       // this module stays importable from unit tests that only read config.
       const nodemailer = (await import('nodemailer')).default;
-      const transporter = nodemailer.createTransport({
-        host: 'smtp.gmail.com',
-        port: 587,
-        secure: false, // STARTTLS on 587. Port 465 is the implicit-TLS one.
-        auth: {
-          user,
-          // Google removed "less secure app" passwords; this is an App
-          // Password, which requires 2-Step Verification on the account and is
-          // the supported way to authenticate SMTP.
-          pass: pass.replace(/\s+/g, ''), // Google displays it in four groups of four.
-        },
-
-        // Bounded deliberately. nodemailer defaults to two minutes, and these
-        // sends run inside `after()` — which keeps the serverless function
-        // alive until they finish. An unreachable SMTP host would therefore
-        // hold a function open for the full two minutes, burning execution
-        // time and risking the platform's max duration, to deliver an email
-        // that was never going to arrive. Ten seconds is far more than a
-        // healthy Gmail handshake needs, and failing fast costs only a log
-        // line: the booking is already committed and already answered.
-        connectionTimeout: 10_000,
-        greetingTimeout: 10_000,
-        socketTimeout: 15_000,
-      });
+      const transporter = nodemailer.createTransport(gmailOptions(user, pass));
 
       await transporter.sendMail({
         from: withDisplayName(user, message.fromName),
