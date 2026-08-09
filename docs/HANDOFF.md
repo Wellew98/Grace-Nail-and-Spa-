@@ -10,17 +10,21 @@ what is deliberately the way it is, and what is left.**
 
 ## 1. Where things stand
 
-Spec: `spabookingbuildspec1.md`. **Phases 1 and 2 are complete.** The spec says to stop
-there and hand back for review, so Phases 3–5 (Google Calendar sync, WhatsApp reminders,
-deposits) are deliberately not built.
+Spec: **`docs/spabookingbuildspec2.md`** — v2 supersedes v1, and where they disagree v2
+wins. **Phases 1 and 2 are complete.** Phase 3 (Google Calendar sync) is authorised by
+v2 §0 but **not started**. Phases 4–5 remain out of scope.
+
+Section numbers moved between v1 and v2. This file cites **v2** throughout; older code
+comments still cite v1 (v1 §5 = v2 §7, v1 §4 = v2 §6, v1 §7.1 = v2 §14, v1 §9 = v2 §12).
 
 | | Status |
 |---|---|
-| Booking engine (§3–§7.1) | Done. 79 tests green against real Postgres |
-| Public site (§8 Phase 1) | Done and deployed |
-| `/book`, `/b/[token]` (§5, §6) | Done and deployed |
-| Admin (§7) | Done, deployed, **signed into and confirmed working** |
-| §9 acceptance tests, all 12 | Passing. Test 8 also re-verified against the live project |
+| Booking engine (v2 §5–§8) | Done. 92 tests green against real Postgres |
+| Public site (Phase 1) | Done and deployed |
+| `/book`, `/b/[token]` | Done and deployed |
+| Admin (v2 §15) | Done, deployed, **signed into and confirmed working** |
+| v2 §12.A acceptance tests, all 13 incl. 12a | Passing. Test 8 also re-verified against the live project |
+| **Privacy / POPIA (v2 §9)** | **Done — see §11 below.** Clears launch-gate item §1.4 |
 | Supabase → GitHub deploy | Working. Migrations apply on push |
 | Vercel | Deployed and serving |
 
@@ -226,25 +230,44 @@ password at all.
 
 ## 9. Outstanding
 
-**Blocking launch**
+This is v2 §1's launch gate. **Nothing ships to customers until the blocking five are
+clear.** Item 4 is done; the other four are not code and cannot be done from here.
 
-1. Real treatments, therapists and resources (§2 above).
+**Blocking**
 
-**Should do**
+1. **Real treatments, therapists and resources** (§2 above). Enter in Admin → Setup, then
+   `npm run db:demo-clear`.
+2. **Transactional email configured** — `RESEND_API_KEY`, `BOOKING_FROM_EMAIL`,
+   `OWNER_NOTIFICATION_EMAIL`. Built, and silently no-ops without them: the customer books,
+   receives nothing, and phones to check.
+3. **Production branch off the feature branch.** Supabase still points at
+   `claude/project-doc-8cv2my`, so every push migrates production with no review step.
+   Create `main`, point Supabase and Vercel at it.
+4. ~~**Privacy notice on `/book`**~~ — **done**, see §11.
+5. **Booking URL on the Google Business Profile.** For a spa in Glenanda, Maps is where the
+   traffic is. Omitted from v1 entirely.
 
-2. **Rotate the database password.** It was pasted into a chat transcript during debugging.
-   Supabase → Settings → Database → Reset database password, update `SUPABASE_DB_URL` in
-   Vercel, redeploy.
-3. **Move the Supabase production branch off the feature branch.** It is set to
-   `claude/project-doc-8cv2my`, so every push migrates production with no review step. Create
-   `main`, point Supabase and Vercel at it, and merges become the gate.
-4. Confirm whether WhatsApp is a separate line from the phone number.
-5. Replace `google_maps_url` with the canonical listing URL, or set `gbp_place_id`.
-6. Set `RESEND_API_KEY`, `BOOKING_FROM_EMAIL`, `OWNER_NOTIFICATION_EMAIL` — confirmation
-   email is built and silently no-ops without them.
-7. Real photography for `/gallery`.
+**Before telling anyone about it**
 
-**Explicitly out of scope** — Phases 3–5, and everything in spec §0's non-goals: payments,
+6. `gbp_place_id` set, or `google_maps_url` replaced with the canonical listing URL.
+7. Confirm whether WhatsApp is a separate line from `063 352 5374`.
+8. Real photography for `/gallery`.
+9. **Owner-in-hand test** (v2 §12.B) — she does four tasks on her own phone, unprompted.
+10. **One real customer** books end to end, cold (v2 §12.C).
+
+9 and 10 are gates, not nice-to-haves. Everything above them is verifiable by code; those
+two are the only evidence the system will actually be used. Nobody has booked a real
+appointment on this yet — **it is deployed, not launched.**
+
+**Also outstanding:** rotate the database password (it was pasted into a chat transcript
+during debugging). Supabase → Settings → Database → Reset, update `SUPABASE_DB_URL` in
+Vercel, **redeploy**, then hit `/api/health`. Rotation without redeploy takes the booking
+page offline.
+
+**Next build:** Phase 3, Google Calendar sync — v2 §11. Not started. v2 says to wait until
+she has used the admin for a full week and build against what she actually opens.
+
+**Explicitly out of scope** — Phases 4–5, and everything in v2 §0's non-goals: payments,
 customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI, chatbot.
 
 ---
@@ -252,15 +275,16 @@ customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI, c
 ## 10. Orientation
 
 ```
-lib/availability.ts     §4 — the slot algorithm. 15-min grid, occupancy = duration + turnaround
-lib/booking.ts          §5, §6 — write path, cancel, reschedule. The advisory lock lives here
-lib/config-guards.ts    §7.1 — what happens to bookings already on the books
+lib/availability.ts     v2 §6 — the slot algorithm. 15-min grid, occupancy = duration + turnaround
+lib/booking.ts          v2 §7, §8 — write path, cancel, reschedule, erase. The advisory lock lives here
+lib/config-guards.ts    v2 §14 — what happens to bookings already on the books
 lib/db.ts               pool, transactions, SQLSTATE handling, connection diagnosis
 lib/health.ts           the checks behind /api/health
 lib/time.ts             timezone conversion at the edges
 lib/site.ts             every word of prose, and the rule for what may be claimed
 app/admin/              today · week · walk-in · blocks · settings
-tests/                  the §9 acceptance tests, against real Postgres
+app/privacy/            v2 §9 — the POPIA notice. Read its header before editing a word of it
+tests/                  the v2 §12.A acceptance tests, against real Postgres
 ```
 
 Design: the organising device is a **lacquer swatch** — a nail bar's characteristic object is
@@ -269,3 +293,77 @@ the whole site. Palette and reasoning are at the top of `app/globals.css`.
 
 **Run the tests before changing anything in `lib/`.** They are the specification made
 executable, and several of them exist because the obvious implementation was wrong.
+
+---
+
+## 11. Privacy and POPIA (v2 §9) — what was built and why it is shaped this way
+
+Clears launch-gate item v2 §1.4. Name and phone are personal information under POPIA, and
+it applies to a two-person spa exactly as it does to a bank.
+
+### The pieces
+
+| | |
+|---|---|
+| `app/privacy/page.tsx` | The notice. Names the **business** as responsible party (§9.2) and whoever runs the site as its operator |
+| `components/book/booking-flow.tsx` | One line **above** the confirm button, linking to `/privacy` (§9.1) |
+| `components/site-footer.tsx` | Footer link — reachable from anywhere, not only the point of collection |
+| `lib/booking.ts` → `forgetCustomer` | "Delete my details" (§9.4) |
+| `app/api/manage/[token]/forget/route.ts` | Its route. Same credential as cancel: the manage token |
+| `tests/privacy.test.ts` | 8 tests |
+
+### The copy rule applies to `/privacy`, harder
+
+Every sentence on that page is a statement about **what the code does**, and each is
+checkable against a named file — that is the only reason it could be written without the
+owner's sign-off. It describes the system, not her business. The page header lists what to
+verify against what. **Do not add a claim there about how she handles data offline** — her
+paper diary, her staff, her retention habits. None of that is ours to assert.
+
+### Erasure anonymises, and three things happen together
+
+`appointments.customer_id` is `not null` and the foreign keys are NO ACTION on purpose
+(§14), so a real DELETE either fails loudly or tears a hole in the diary. The studio's
+record of work done is not the customer's to erase; her name on it is. So:
+
+1. **Future bookings are cancelled.** Erasing the phone number makes an upcoming
+   appointment un-keepable — nobody could be told if the therapist were off sick. The owner
+   is emailed about each one after commit, which is why they are read *before* the wipe.
+2. **Identifying columns are overwritten**, including free-text notes on both the customer
+   and her appointments. Notes are where personal detail accumulates; a deletion that
+   leaves "phone her sister on 082…" behind has not deleted anything.
+3. **Every manage token is rotated**, which kills the links already in her inbox. Without
+   this the record stays reachable by anyone holding an old link and "erased" is not true.
+
+The anonymised marker is `phone = 'erased:<customer_id>'`. It goes in `phone` because that
+column is `not null` under `unique (business_id, phone)`, so the placeholder must be both
+present and unique. A real number is E.164 and starts `+`, so a leading letter cannot
+collide. **Consequence:** the same person booking again later comes back through the
+`(business_id, phone)` upsert as a *new* customer row, unlinked to the old one. That is the
+point, and `tests/privacy.test.ts` pins it.
+
+`forgetCustomer` takes the same `pg_advisory_xact_lock` as the booking path, so a booking
+in flight cannot attach a fresh appointment to a row being emptied.
+
+### One thing that is easy to undo by accident
+
+The manage page does **not** call `router.refresh()` after erasing. Erasure rotates the
+token, so the page's own URL is dead the instant it returns; a refresh would replace the
+confirmation with a 404 and leave the customer unsure whether anything happened. Verified
+in a browser: the old link 404s afterwards.
+
+### Also done under §9.5
+
+`lib/email.ts` no longer logs provider error objects whole. A provider's error can carry
+the request back with it, and the request contains a customer's name and email address —
+which would put personal data in Vercel's log drain, outside anything she can ask us to
+erase. `safeError()` keeps the message and status. No route handler logs a request body;
+that was audited and was already clean.
+
+### Still not done, and not codeable from here
+
+§9.2's second half: if the system keeps being operated after handover, the
+operator/responsible-party relationship should be **one page in writing**. The site now
+says that is the relationship. Nothing has been signed.
+
+This is not legal advice. It is the set of things that are obviously right and cost nothing.

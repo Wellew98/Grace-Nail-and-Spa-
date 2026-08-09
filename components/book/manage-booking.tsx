@@ -58,14 +58,16 @@ export function ManageBooking({
 }) {
   const router = useRouter();
 
-  const [mode, setMode] = useState<'view' | 'reschedule' | 'confirm-cancel'>('view');
+  const [mode, setMode] = useState<'view' | 'reschedule' | 'confirm-cancel' | 'confirm-forget'>(
+    'view',
+  );
   const [date, setDate] = useState<string | null>(null);
   const [staffId, setStaffId] = useState<string>('any');
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<'moved' | 'cancelled' | null>(null);
+  const [done, setDone] = useState<'moved' | 'cancelled' | 'erased' | null>(null);
 
   const cancelled = appointment.status === 'cancelled';
   const past = new Date(appointment.startsAt).getTime() < Date.now();
@@ -150,6 +152,46 @@ export function ManageBooking({
     }
   }
 
+  /**
+   * Spec §9.4 — "delete my details".
+   *
+   * Deliberately does NOT call router.refresh() on success: erasing rotates
+   * every manage token, so this page's own URL is dead the instant it returns.
+   * A refresh would replace the confirmation with a 404 and leave the customer
+   * unsure whether anything happened.
+   */
+  const [erasedCancelCount, setErasedCancelCount] = useState(0);
+
+  async function forget() {
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/manage/${token}/forget`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.message ?? 'We could not remove your details. Please phone us.');
+        setMode('view');
+        return;
+      }
+      setErasedCancelCount(data.cancelled ?? 0);
+      setDone('erased');
+    } catch {
+      setError('We could not reach the booking system. Please phone us.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const eraseControls = (
+    <EraseDetails
+      mode={mode}
+      busy={busy}
+      onAsk={() => setMode('confirm-forget')}
+      onKeep={() => setMode('view')}
+      onConfirm={forget}
+    />
+  );
+
   const when = new Intl.DateTimeFormat('en-ZA', {
     timeZone: timezone,
     weekday: 'long',
@@ -161,6 +203,31 @@ export function ManageBooking({
   }).format(new Date(appointment.startsAt));
 
   // ------------------------------------------------------------------- states
+  if (done === 'erased') {
+    return (
+      <Shell title="Details deleted" serviceName={appointment.serviceName}>
+        <p className="text-[0.95rem] leading-relaxed text-mauve-500">
+          Your name, number and email address have been removed from {businessName}&rsquo;s
+          records.
+          {erasedCancelCount > 0 &&
+            ` ${erasedCancelCount === 1 ? 'Your upcoming booking was' : `Your ${erasedCancelCount} upcoming bookings were`} cancelled, because we would have no way to contact you about ${erasedCancelCount === 1 ? 'it' : 'them'}.`}
+        </p>
+        <p className="mt-4 text-[0.95rem] leading-relaxed text-mauve-500">
+          This link has stopped working. You are very welcome to book again any time — it will
+          start fresh.
+        </p>
+        <div className="mt-7">
+          <Link
+            href="/book"
+            className="rounded-full bg-lacquer-500 px-6 py-3 text-sm font-medium text-blush-50 hover:bg-lacquer-600"
+          >
+            Book a treatment
+          </Link>
+        </div>
+      </Shell>
+    );
+  }
+
   if (done === 'cancelled' || (cancelled && !done)) {
     return (
       <Shell title="Booking cancelled" serviceName={appointment.serviceName}>
@@ -177,6 +244,15 @@ export function ManageBooking({
             Book another time
           </Link>
         </div>
+
+        {error && (
+          <p role="alert" className="mt-6 rounded-xl bg-lacquer-500/10 px-4 py-3 text-sm text-lacquer-600">
+            {error}
+          </p>
+        )}
+
+        {/* A cancelled booking is still a record with her name on it (§9.4). */}
+        {eraseControls}
       </Shell>
     );
   }
@@ -286,7 +362,7 @@ export function ManageBooking({
             </button>
           </div>
         </div>
-      ) : (
+      ) : mode === 'reschedule' ? (
         <div className="mt-8">
           <div className="flex items-baseline justify-between gap-4">
             <h2 className="font-display text-xl font-semibold text-aubergine-900">Pick a new time</h2>
@@ -374,12 +450,88 @@ export function ManageBooking({
             )}
           </div>
         </div>
-      )}
+      ) : null}
+
+      {eraseControls}
 
       <p className="mt-10 text-xs text-mauve-400">
         {businessName} · {formatPhoneForDisplay(businessPhone)}
       </p>
     </Shell>
+  );
+}
+
+/**
+ * Spec §9.4 — the POPIA erasure control.
+ *
+ * Deliberately a plain text link rather than a button: it is a right, so it
+ * must be present and findable on every state of this page, but it is not one
+ * of the two things a customer came here to do. Putting it at button weight
+ * next to "Move" and "Cancel" would make deleting your history look like a
+ * normal step in managing a booking, and someone would take it by accident.
+ *
+ * The confirmation spells out all three consequences before the irreversible
+ * tap, because every one of them surprises people: upcoming bookings go, the
+ * link in their inbox dies, and nothing comes back.
+ */
+function EraseDetails({
+  mode,
+  busy,
+  onAsk,
+  onKeep,
+  onConfirm,
+}: {
+  mode: string;
+  busy: boolean;
+  onAsk: () => void;
+  onKeep: () => void;
+  onConfirm: () => void;
+}) {
+  if (mode !== 'confirm-forget') {
+    return (
+      <div className="mt-10 border-t border-blush-200 pt-6">
+        <button
+          type="button"
+          onClick={onAsk}
+          className="text-sm text-mauve-400 underline underline-offset-4 hover:text-aubergine-900"
+        >
+          Delete my details
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-10 rounded-xl border border-blush-300 px-5 py-5">
+      <h2 className="font-display text-lg font-semibold text-aubergine-900">
+        Delete your details?
+      </h2>
+      <ul className="mt-3 space-y-2 text-sm leading-relaxed text-mauve-600">
+        <li>
+          Your name, number and email address are erased from the studio&rsquo;s records. The
+          appointments stay on the diary, but without anything identifying you.
+        </li>
+        <li>Any booking you still have coming up is cancelled.</li>
+        <li>This link stops working, and none of it can be undone.</li>
+      </ul>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onConfirm}
+          disabled={busy}
+          className="rounded-full bg-lacquer-500 px-6 py-3 text-sm font-medium text-blush-50 hover:bg-lacquer-600 disabled:opacity-60"
+        >
+          {busy ? 'Deleting…' : 'Yes, delete my details'}
+        </button>
+        <button
+          type="button"
+          onClick={onKeep}
+          className="rounded-full border border-aubergine-900/25 px-6 py-3 text-sm hover:bg-blush-100"
+        >
+          Never mind
+        </button>
+      </div>
+    </div>
   );
 }
 

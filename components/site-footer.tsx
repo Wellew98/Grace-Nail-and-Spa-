@@ -103,6 +103,17 @@ export function SiteFooter({
             © {new Date().getFullYear()} {business.name}
           </p>
           {/*
+            POPIA (§9): the notice has to be reachable from anywhere on the
+            site, not only from the point of collection on /book. Kept out of
+            NAV — it is a legal footer link, not somewhere a customer browses.
+          */}
+          <Link
+            href="/privacy"
+            className="text-xs text-mauve-400 underline-offset-4 hover:text-aubergine-900 hover:underline"
+          >
+            Privacy
+          </Link>
+          {/*
             The only way in to the diary. The admin is deliberately not in the
             main navigation — customers have no use for it — but with no link
             anywhere the owner has to be told a URL and remember it, which is

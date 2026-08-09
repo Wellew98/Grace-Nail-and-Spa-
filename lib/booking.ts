@@ -11,7 +11,7 @@ import {
 import { getAvailableSlots, getBusiness, getService, resolveSlot } from './availability';
 import { normalisePhone } from './phone';
 import { addMinutes, utcToZonedDate } from './time';
-import type { Appointment, BookingSource, Queryable, Slot } from './types';
+import type { Appointment, BookingSource, Customer, Queryable, Slot } from './types';
 
 /** Spec §5 step 6: crypto random, 32 bytes, url-safe. */
 function generateManageToken(): string {
@@ -628,6 +628,142 @@ export async function rescheduleBooking(options: {
     }
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Erasure — spec §9.4
+// ---------------------------------------------------------------------------
+
+/**
+ * Marks an anonymised `customers` row.
+ *
+ * It goes in `phone` because that column is `not null` and carries
+ * `unique (business_id, phone)`, so the placeholder has to be both present and
+ * unique — the customer id supplies the uniqueness. A real number is E.164 and
+ * always starts `+`, so a leading letter cannot collide with one.
+ *
+ * Consequence worth knowing: the same person booking again later comes back
+ * through the `(business_id, phone)` upsert as a NEW customer row, with no link
+ * to the erased one. That is the point.
+ */
+export const ERASED_PHONE_PREFIX = 'erased:';
+export const ERASED_NAME = 'Deleted customer';
+
+export function isErased(customer: { phone: string }): boolean {
+  return customer.phone.startsWith(ERASED_PHONE_PREFIX);
+}
+
+export type ForgetResult =
+  | { ok: true; cancelled: AppointmentDetail[]; alreadyErased: boolean }
+  | { ok: false; error: 'not_found'; message: string };
+
+/**
+ * "Delete my details" — spec §9.4.
+ *
+ * ANONYMISE, NEVER DELETE. `appointments.customer_id` is `not null` and the
+ * foreign keys are NO ACTION on purpose (§14), so a real DELETE either fails
+ * loudly or, if the constraint were softened, tears a hole in the diary. The
+ * studio's record of work done is not the customer's to erase; her name on it
+ * is. So the row survives and is emptied of the person.
+ *
+ * Three things happen together, and all three are required:
+ *
+ *  1. Future bookings are cancelled. Erasing the phone number makes an upcoming
+ *     appointment un-keepable — nobody could be told if the therapist were off
+ *     sick — so leaving it on the diary would strand both sides. The owner is
+ *     emailed about each one by the caller, after this commits.
+ *  2. The identifying columns are overwritten, including free-text notes on
+ *     both the customer and her appointments. Notes are where personal detail
+ *     accumulates, and a deletion that leaves "phone her sister on 082…"
+ *     behind has not deleted anything.
+ *  3. Every manage token of hers is rotated, which kills the links already
+ *     sitting in her inbox. Without this the record stays reachable by anyone
+ *     holding an old link, and "erased" would not be true.
+ *
+ * Idempotent: running it twice is harmless and reports `alreadyErased`.
+ */
+export async function forgetCustomer(options: {
+  customerId: string;
+  actor?: 'customer' | 'admin';
+  now?: Date;
+}): Promise<ForgetResult> {
+  const { customerId, actor = 'customer', now = new Date() } = options;
+
+  const customer = await queryOne<Customer>('select * from customers where id = $1', [customerId]);
+  if (!customer) {
+    return { ok: false, error: 'not_found', message: 'Those details could not be found.' };
+  }
+  if (isErased(customer)) {
+    return { ok: true, cancelled: [], alreadyErased: true };
+  }
+
+  // Captured BEFORE the wipe: the owner's cancellation notice needs to say who
+  // and what, and a moment later that is gone. Sent by the caller after commit.
+  const upcoming = await query<AppointmentDetail>(
+    `${DETAIL_SELECT}
+      where a.customer_id = $1
+        and a.status in ('pending','confirmed')
+        and a.starts_at >= $2
+      order by a.starts_at`,
+    [customerId, now.toISOString()],
+  );
+
+  await withTransaction(async (client) => {
+    // Serialise against in-flight bookings for this business, so a booking that
+    // is mid-flight cannot attach a fresh appointment to a row we are about to
+    // empty and leave the owner an uncontactable customer.
+    await lockBusinessForWrite(client, customer.business_id);
+
+    for (const appointment of upcoming) {
+      await client.query(
+        `update appointments
+            set status = 'cancelled', cancelled_at = now()
+          where id = $1
+            and status in ('pending','confirmed')`,
+        [appointment.id],
+      );
+      await client.query(
+        `insert into appointment_events (appointment_id, event, actor, detail)
+              values ($1, 'cancelled', $2, $3)`,
+        [appointment.id, actor, JSON.stringify({ reason: 'customer_erased' })],
+      );
+    }
+
+    // Rotate every manage token, past and future, so old links stop resolving.
+    // Generated per row in application code because manage_token is unique.
+    const tokened = await client.query('select id from appointments where customer_id = $1', [
+      customerId,
+    ]);
+    for (const row of tokened.rows) {
+      await client.query('update appointments set manage_token = $2, notes = null where id = $1', [
+        row.id,
+        generateManageToken(),
+      ]);
+    }
+
+    await client.query(
+      `update customers
+          set name  = $2,
+              phone = $3,
+              email = null,
+              notes = null
+        where id = $1`,
+      [customerId, ERASED_NAME, `${ERASED_PHONE_PREFIX}${customerId}`],
+    );
+
+    // Audit that it happened, against every appointment it touched. The event
+    // records the act, deliberately not the person — a log of who asked to be
+    // forgotten, keyed to their name, would defeat the request.
+    for (const row of tokened.rows) {
+      await client.query(
+        `insert into appointment_events (appointment_id, event, actor, detail)
+              values ($1, 'customer_erased', $2, $3)`,
+        [row.id, actor, JSON.stringify({ cancelled_upcoming: upcoming.length })],
+      );
+    }
+  });
+
+  return { ok: true, cancelled: upcoming, alreadyErased: false };
 }
 
 // ---------------------------------------------------------------------------

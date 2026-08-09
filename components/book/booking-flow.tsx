@@ -51,12 +51,14 @@ export function BookingFlow({
   days,
   preselectedServiceId,
   minNoticeMinutes,
+  businessName,
   businessPhone,
 }: {
   services: BookableService[];
   days: BookableDay[];
   preselectedServiceId: string | null;
   minNoticeMinutes: number;
+  businessName: string;
   businessPhone: string;
 }) {
   const [serviceId, setServiceId] = useState<string | null>(
@@ -462,6 +464,24 @@ export function BookingFlow({
                   {error}
                 </p>
               )}
+
+              {/*
+                POPIA notice at the point of collection — spec §1.4 and §9.1.
+                It sits ABOVE the button on purpose: a notice underneath the
+                thing it is meant to inform is a notice given after the fact.
+                Name and phone are personal information whether the business
+                has two staff or two thousand, so this is not optional, and it
+                costs one line.
+              */}
+              <p className="text-xs leading-relaxed text-mauve-400">
+                Your name and number go to {businessName}, who use them for this booking and
+                nothing else — no marketing, ever. You can have them erased at any time from the
+                link we send you.{' '}
+                <Link href="/privacy" className="underline underline-offset-4 hover:text-mauve-500">
+                  How we handle your details
+                </Link>
+                .
+              </p>
 
               <button
                 type="submit"

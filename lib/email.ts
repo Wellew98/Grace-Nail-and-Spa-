@@ -20,6 +20,28 @@ function client(): Resend | null {
   return key ? new Resend(key) : null;
 }
 
+/**
+ * What may be written to the log when a send fails — spec §9.5, "no personal
+ * data in URLs or logs".
+ *
+ * A provider's error object is not ours and its shape is not guaranteed. It
+ * can carry the request back with it, and the request contains a customer's
+ * email address and name. Logging the whole thing puts personal data into
+ * Vercel's log drain, where it lives on well past the booking and outside
+ * anything the customer can ask us to erase. The message and status are what
+ * anyone diagnosing this actually reads; the appointment id is the key for
+ * joining back to the booking, which is in the database where it belongs.
+ */
+function safeError(error: unknown): { message: string; status?: number } {
+  if (error && typeof error === 'object') {
+    const candidate = error as { message?: unknown; statusCode?: unknown; name?: unknown };
+    const status = typeof candidate.statusCode === 'number' ? candidate.statusCode : undefined;
+    if (typeof candidate.message === 'string') return { message: candidate.message, status };
+    if (typeof candidate.name === 'string') return { message: candidate.name, status };
+  }
+  return { message: 'unknown error' };
+}
+
 const FROM = process.env.BOOKING_FROM_EMAIL ?? 'bookings@example.com';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000';
 
@@ -77,7 +99,7 @@ export async function sendCustomerConfirmation(appointment: AppointmentDetail): 
   } catch (error) {
     console.error('[email] customer confirmation failed', {
       appointmentId: appointment.id,
-      error,
+      ...safeError(error),
     });
   }
 }
@@ -102,7 +124,10 @@ export async function sendOwnerNotification(appointment: AppointmentDetail): Pro
       ),
     });
   } catch (error) {
-    console.error('[email] owner notification failed', { appointmentId: appointment.id, error });
+    console.error('[email] owner notification failed', {
+      appointmentId: appointment.id,
+      ...safeError(error),
+    });
   }
 }
 
@@ -119,6 +144,9 @@ export async function sendCancellationNotice(appointment: AppointmentDetail): Pr
       html: layout('Booking cancelled', detailRows(appointment)),
     });
   } catch (error) {
-    console.error('[email] cancellation notice failed', { appointmentId: appointment.id, error });
+    console.error('[email] cancellation notice failed', {
+      appointmentId: appointment.id,
+      ...safeError(error),
+    });
   }
 }

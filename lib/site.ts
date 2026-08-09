@@ -62,6 +62,13 @@ export const NAV = [
   { href: '/contact', label: 'Contact' },
 ] as const;
 
+/**
+ * Shown at the foot of /privacy. Bump it whenever that page's substance
+ * changes — not for a typo. A notice carrying a date it has outgrown is worse
+ * than one carrying no date, because it invites the reader to trust it.
+ */
+export const PRIVACY_LAST_UPDATED = 'August 2026';
+
 /** 0 = Sunday, matching working_hours.day_of_week. */
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;

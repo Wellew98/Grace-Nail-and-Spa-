@@ -91,6 +91,26 @@ export async function countLiveAppointments(): Promise<number> {
 }
 
 /**
+ * The check that actually matters in test 12a (§12.A): has any appointment
+ * been written with no resource for a service that requires one?
+ *
+ * `resource_id NULL` never conflicts with anything — `no_resource_overlap` is
+ * an equality-plus-overlap exclusion, and NULL is not equal to NULL — so a row
+ * like this is invisible to the constraint that is supposed to be the final
+ * authority. That is precisely how one massage room was once bookable without
+ * limit. Asks Postgres rather than trusting the availability engine, because
+ * the engine is the thing under suspicion.
+ */
+export async function findResourcelessAppointments(): Promise<unknown[]> {
+  return query(
+    `select a.id, a.service_id, a.starts_at
+       from appointments a
+      where a.resource_id is null
+        and exists (select 1 from service_resources sr where sr.service_id = a.service_id)`,
+  );
+}
+
+/**
  * The check that actually matters in test 1: are there any two live
  * appointments whose occupancy ranges overlap on the same staff member or the
  * same resource? Asks Postgres directly rather than trusting the app.
