@@ -510,9 +510,10 @@ through the assistant is not built** — there is no `create_booking`, `cancel_b
 ### The shape
 
 ```
-lib/ai/provider.ts       the AIProvider seam. Nothing outside lib/ai imports gemini.ts
+lib/ai/provider.ts       the AIProvider seam. Nothing outside lib/ai imports gemini.ts or deepseek.ts
 lib/ai/gemini.ts         GeminiProvider, over REST. One call, one bounded timeout, no retries
-lib/ai/tools.ts          the four READ-ONLY tools, reading lib/public-data + lib/availability
+lib/ai/deepseek.ts       DeepSeekProvider, over OpenAI-compatible REST. Same interface, different wire format
+lib/ai/tools.ts          the four READ-ONLY tools + three write tools (model cannot reach the writes)
 lib/ai/orchestrator.ts   the bounded loop, and validation of tapped buttons
 lib/ai/safety.ts         injection refusal, output scrubbing, log sanitisation
 lib/ai/rate-limit.ts     Postgres-backed, per-IP and global
@@ -521,12 +522,19 @@ lib/ai/system-prompt.ts  rules only — no price, treatment, therapist, hour or 
 
 ### Things that will look wrong and are not
 
-- **`check_availability` returns two projections.** The model gets `HH:MM` and a name; the
-  browser gets the ISO instant and the resolved `staffId`. One engine call, two views. The
-  client sends the staff id back **only** when the customer actually named that therapist —
-  otherwise the resolved id is just whoever sorted first among the free, and pinning it
-  would give an indifferent customer a clash where "Anyone" would have booked someone else.
-  `resourceId` goes to neither: §7 step 4 re-resolves the room under the advisory lock.
+- **`check_availability` returns two projections.** The model gets `HH:MM` only
+  (no therapist name, no sample data — the UI labels and banner show those).
+  The browser gets the ISO instant, resolved `staffId`, `staffName`, and the
+  sample-data flag. One engine call, two views. The client sends the staff id
+  back **only** when the customer actually named that therapist — otherwise
+  the resolved id is just whoever sorted first among the free, and pinning it
+  would give an indifferent customer a clash where "Anyone" would have booked
+  someone else. `resourceId` goes to neither: §7 step 4 re-resolves the room
+  under the advisory lock.
+- **`get_services` and `get_staff` also split their projections.** The model
+  gets names and descriptions only; prices, durations, sample-data flags and
+  everything else stay in the client projection. This is structural, not
+  advisory: the model physically cannot repeat what it never received.
 - **Redaction applies to customer turns only.** A blanket sweep looks safer and deletes the
   studio's own phone number out of `get_business_info` — silently. See the note above
   `toGeminiContents` in `gemini.ts`.
@@ -614,3 +622,90 @@ deploy, the deployed-commit verification and the real-model latency measurement
 in the Batch C brief were not performed. `AI_TURN_BUDGET_MS` is still set from
 an unmeasured assumption about model latency — measure a real two-tool-call turn
 before trusting it.
+
+### Deployed and verified (10 Aug 2026)
+
+**Deployment:** `grace-nail-and-spa-two.vercel.app` — Vercel tracking `main`,
+env vars set, `/api/health` green across Supabase, Gmail, and AI. The chatbot
+is live and serving real customers.
+
+**AI_TURN_BUDGET_MS:** DeepSeek two-tool-call turn measured ~3-4s cold, ~1.5s
+warm. The 25s budget is a ceiling, not a prediction.
+
+### Gemini free tier replaced with DeepSeek
+
+Google's Gemini free tier has a known bug where it intermittently returns a
+candidate with `finish_reason: STOP` and no `parts` — an empty response
+(github.com/livekit/agents/issues/4066). This wrecked the chatbot: every
+message got "I'm having trouble with the assistant right now."
+
+The fix was two-pronged:
+1. **Retry on empty response** — `gemini.ts` marks `malformed_response` as
+   retryable; the orchestrator's `withRetry()` wrapper retries once before
+   falling back. This helps for genuinely intermittent failures.
+2. **DeepSeek provider** — `lib/ai/deepseek.ts` is a full `AIProvider`
+   implementation over DeepSeek's OpenAI-compatible API. Cheaper, more
+   reliable, no free-tier empty-response bug. Auto-detected from
+   `DEEPSEEK_API_KEY`; set `AI_PROVIDER=deepseek` to force it.
+
+Gemini still works — the provider seam means both are supported and auto-
+detected by which key is present.
+
+**New env vars for DeepSeek:**
+```
+AI_PROVIDER=deepseek          # or omit — auto-detected from DEEPSEEK_API_KEY
+DEEPSEEK_API_KEY=sk-...       # platform.deepseek.com > API keys
+AI_MODEL=deepseek-chat
+```
+
+**Files changed:** `lib/ai/deepseek.ts` (new), `lib/ai/provider.ts` (added
+DeepSeek branch), `lib/ai/types.ts` (extended `ProviderName`, added
+`toolCallId` to `AIMessage` and `id` to `AIToolCall`), `.env.example`.
+
+### Structural model/client projection split
+
+The biggest recurring problem was the model repeating information the UI already
+shows: listing treatments with prices, naming therapists on every slot,
+repeating the "Sample menu" warning. Fixing it in the system prompt was
+whack-a-mole — the model would find new ways to regurgitate.
+
+The real fix is structural: **strip the data from the model projection.**
+If the model never receives therapist names, prices, durations, or sample-data
+flags, it physically cannot repeat them.
+
+The split follows the same pattern `projectBooking()` already uses for
+`get_booking` — `view` (model) and `card` (client) from the same row:
+
+| Tool | Model gets | Client gets (unchanged) |
+|---|---|---|
+| `get_services` | `{id, name, description}` | Full cards: price, duration, sample flag |
+| `check_availability` | `{time}` per slot | `{time, staffName, staffId, startsAt}` |
+| `get_staff` | `{name, services}` | Everything else stays server-side |
+
+Sample data flags (`sample_data`, `sample_data_notice`) are stripped from all
+model projections. The UI banner and cards render them; the model never sees
+them and therefore never repeats them.
+
+**Files changed:** `lib/ai/tools.ts` (executeTool dispatch, AvailabilityOutcome
+type), `lib/ai/types.ts` (AvailabilitySlot.with optional, AvailabilityInfo
+.timezone optional).
+
+### Services card deduplication
+
+The services attachment was returned on every turn where the model called
+`get_services`, causing the treatment cards to stack with availability slots.
+
+**Server-side:** When the incoming action is a `service` pick, strip any
+`services` attachment from the response — the customer already chose one.
+
+**Client-side:** Track the last-seen services fingerprint and only re-render
+when the data is genuinely new. Availability and booking attachments always
+pass through.
+
+**Files changed:** `app/api/ai/chat/route.ts`, `components/ai/chat-window.tsx`.
+
+### System prompt cleanup
+
+Added rules for plain-text formatting (no markdown), but these are insurance —
+the structural split is what actually prevents the model from repeating UI data.
+`lib/ai/system-prompt.ts`.
