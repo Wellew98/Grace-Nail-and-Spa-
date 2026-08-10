@@ -358,11 +358,14 @@ export async function checkAvailability(
   return {
     ok: true,
     data: {
-      ...sample,
+      // Model projection: what the assistant needs to answer. No therapist
+      // names (the UI labels show them), no sample-data warnings (the banner
+      // and cards show them). The model physically cannot repeat what it never
+      // received.
       date: args.date,
       service: service.name,
-      timezone: business.timezone,
-      slots: resolved.map((slot) => ({ time: slot.time, with: slot.staffName })),
+      servicePrice: formatZar(service.price_cents),
+      slots: resolved.map((slot) => ({ time: slot.time })),
     },
     client: {
       kind: 'availability',
@@ -436,7 +439,12 @@ export async function executeTool(
         return {
           ok: true,
           tool: validated.tool,
-          data: services,
+          // Model projection: treatment names only. No prices, durations or
+          // sample-data warnings — the UI cards show those. The model cannot
+          // repeat information it was never given.
+          data: {
+            services: services.services.map((s) => ({ id: s.id, name: s.name })),
+          },
           client: {
             kind: 'services',
             sampleData: services.sample_data,
@@ -455,8 +463,15 @@ export async function executeTool(
           },
         };
       }
-      case 'get_staff':
-        return { ok: true, tool: validated.tool, data: await getStaff(context) };
+      case 'get_staff': {
+        const staff = await getStaff(context);
+        return {
+          ok: true,
+          tool: validated.tool,
+          // Model projection: names and services only. No sample-data warnings.
+          data: { staff: staff.staff.map((s) => ({ name: s.name, services: s.services })) },
+        };
+      }
       case 'check_availability': {
         const outcome = await checkAvailability(context, validated.args as CheckAvailabilityArgs);
         return outcome.ok
