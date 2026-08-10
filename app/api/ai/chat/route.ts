@@ -4,14 +4,17 @@ import {
   BUSY_MESSAGE,
   FALLBACK_MESSAGE,
   describeAction,
+  isWriteAction,
   limitsFrom,
   orchestrate,
+  performWrite,
   type ClientAction,
 } from '@/lib/ai/orchestrator';
 import { getProvider } from '@/lib/ai/provider';
 import { clientIp, consume } from '@/lib/ai/rate-limit';
+import type { ToolContext } from '@/lib/ai/tools';
 import { getBusiness } from '@/lib/public-data';
-import type { AIMessage } from '@/lib/ai/types';
+import type { AIMessage, ChatAttachment } from '@/lib/ai/types';
 
 /**
  * POST /api/ai/chat — the assistant's only public surface.
@@ -19,11 +22,20 @@ import type { AIMessage } from '@/lib/ai/types';
  * ---------------------------------------------------------------------------
  * THIS ROUTE CONTAINS NO BUSINESS LOGIC.
  *
- * It validates, rate limits, and hands off. Every fact comes from the tools,
- * every tool reads the same rows the site renders, and the booking engine is
- * not reachable from here at all — there is no create, cancel or reschedule
- * tool in this batch, so the worst a compromised conversation can do is read
- * the public catalogue.
+ * It validates, rate limits, and hands off. Every fact comes from the tools and
+ * every tool reads the same rows the site renders.
+ *
+ * WRITES ARE NOT REACHABLE BY THE MODEL. A booking, cancellation or move
+ * happens only when the customer taps a confirmation, and it happens HERE,
+ * before the model is consulted — see `performWrite`. The model is handed the
+ * result and asked to put it into a sentence. So the assistant cannot book
+ * because a message sounded like a yes, cannot book something other than what
+ * was confirmed, and cannot announce a success the transaction did not return.
+ *
+ * NAME, PHONE AND THE MANAGE TOKEN ARRIVE IN THE ENVELOPE, never inside
+ * `messages`. They go straight to lib/booking.ts and are never added to the
+ * conversation, so no redaction rule stands between a customer's phone number
+ * and a third party's logs — the number is simply never in that request.
  *
  * ORDER MATTERS. Rate limiting happens before the conversation is even parsed,
  * so a visitor sending a megabyte of nonsense is refused on the cheapest
@@ -73,11 +85,45 @@ const actionSchema = z.discriminatedUnion('kind', [
     startsAt: z.iso.datetime({ offset: true }),
     staffId: z.union([z.uuid(), z.null()]).optional(),
   }),
+  /**
+   * The confirmation tap.
+   *
+   * Name and phone arrive HERE and nowhere else — never inside `messages`, so
+   * they are structurally incapable of reaching the model. The route hands them
+   * straight to `createBooking` and they are gone. That is the difference
+   * between a redaction rule, which the next change can quietly break, and an
+   * architecture, which it cannot.
+   */
+  z.strictObject({
+    kind: z.literal('confirm_booking'),
+    serviceId: z.uuid(),
+    startsAt: z.iso.datetime({ offset: true }),
+    staffId: z.union([z.uuid(), z.null()]).optional(),
+    name: z.string().trim().min(1).max(120),
+    phone: z.string().trim().min(1).max(40),
+    email: z.union([z.email(), z.literal(''), z.null()]).optional(),
+    // Minted client-side, once per confirmation. Same bounds as /api/bookings.
+    idempotencyKey: z.string().min(8).max(200),
+  }),
+  z.strictObject({ kind: z.literal('confirm_cancel') }),
+  z.strictObject({
+    kind: z.literal('confirm_reschedule'),
+    startsAt: z.iso.datetime({ offset: true }),
+    staffId: z.union([z.uuid(), z.null()]).optional(),
+  }),
 ]);
 
 const bodySchema = z.strictObject({
   messages: z.array(messageSchema).min(1).max(limits.maxMessages),
   action: actionSchema.optional(),
+  /**
+   * The customer's manage token, if they arrived from their booking link.
+   *
+   * In the envelope, never in `messages`. It is a working credential for one
+   * appointment, and a credential in the conversation is a credential in a
+   * third party's logs. `ToolContext` carries it to the tools that need it.
+   */
+  manageToken: z.string().min(10).max(200).optional(),
 });
 
 /** Never a stack, never a provider string, never an id. */
@@ -125,29 +171,66 @@ export async function POST(request: Request) {
     content: message.content,
   }));
 
-  // A tapped button becomes a customer turn only after the database agrees it
-  // was a real offer. A rejected action falls through to the conversation as
-  // it stands rather than failing the request.
+  const context: ToolContext = {
+    businessId: business.id,
+    manageToken: parsed.data.manageToken ?? null,
+  };
+
+  // Attachments produced by a write, which must survive the model turn that
+  // narrates it: the customer's booking card has to appear whatever the model
+  // then says, and must not depend on it saying anything sensible.
+  const writeAttachments: ChatAttachment[] = [];
+
   if (parsed.data.action) {
-    const described = await describeAction(parsed.data.action as ClientAction, {
-      businessId: business.id,
-    });
-    if (!described) {
-      console.warn('[ai] rejected action', { kind: parsed.data.action.kind });
-      return reply('That option is no longer available. Ask me what else is free.', 200, false);
+    const action = parsed.data.action as ClientAction;
+
+    if (isWriteAction(action)) {
+      // THE WRITE HAPPENS HERE, before the model is consulted at all. The tap
+      // authorises it; the model is only told what the database did. It cannot
+      // decline to book, cannot book something else, and cannot report a
+      // success that did not happen.
+      const outcome = await performWrite(action, context);
+      if (!outcome) {
+        console.warn('[ai] rejected write action', { kind: action.kind });
+        return reply('I could not do that. Please use the booking page.', 400, true);
+      }
+      messages.push({ role: 'user', content: outcome.turn });
+      if (outcome.attachment) writeAttachments.push(outcome.attachment);
+    } else {
+      // A browse tap becomes a customer turn only after the database agrees it
+      // was a real offer. A rejected action falls through to the conversation
+      // as it stands rather than failing the request.
+      const described = await describeAction(action, context);
+      if (!described) {
+        console.warn('[ai] rejected action', { kind: action.kind });
+        return reply('That option is no longer available. Ask me what else is free.', 200, false);
+      }
+      messages.push({ role: 'user', content: described });
     }
-    messages.push({ role: 'user', content: described });
   }
 
   try {
-    const result = await orchestrate({ messages, businessId: business.id, provider, limits });
+    const result = await orchestrate({
+      messages,
+      businessId: business.id,
+      provider,
+      limits,
+      manageToken: context.manageToken,
+    });
+
+    // The write's own attachment wins over anything the model's turn produced
+    // for the same slot in the UI. What was written is not up for revision.
+    const attachments = [
+      ...writeAttachments,
+      ...result.attachments.filter(
+        (item) => !writeAttachments.some((written) => written.kind === item.kind),
+      ),
+    ];
     return NextResponse.json(
-      { ...result, bookUrl: '/book' },
+      { ...result, attachments, bookUrl: '/book' },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
-    // orchestrate() is built to return rather than throw. If it throws anyway,
-    // the customer still gets a sentence and a working booking page.
     console.error('[ai] chat failed', {
       message: error instanceof Error ? error.message : 'unknown error',
     });

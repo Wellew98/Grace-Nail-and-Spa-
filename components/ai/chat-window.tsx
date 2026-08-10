@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AvailabilityOptions } from './availability-options';
+import { BookingSummary, type PendingBooking } from './booking-summary';
 import { ChatInput } from './chat-input';
 import { ChatMessage, ChatThinking, type ChatTurn } from './chat-message';
+import { ManageLink } from './manage-link';
 import { ServiceCards } from './service-cards';
 import { SuggestionButtons } from './suggestion-buttons';
-import type { ChatAttachment } from '@/lib/ai/types';
+import type { BookingAttachment, ChatAttachment } from '@/lib/ai/types';
 
 /**
  * The conversation panel.
@@ -39,16 +41,27 @@ interface ChatResponse {
 export function ChatWindow({
   businessName,
   maxMessageLength,
+  manageToken,
   onClose,
 }: {
   businessName: string;
   maxMessageLength: number;
+  /** Present only when the customer arrived from their own booking link. */
+  manageToken?: string | null;
   onClose: () => void;
 }) {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: 'assistant', content: GREETING }]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The slot the customer has chosen but not yet confirmed.
+   *
+   * Held here, not on the server and not in the conversation: until they press
+   * confirm there is nothing to book and nobody to tell. Cleared the moment a
+   * booking comes back, so the card cannot be confirmed twice.
+   */
+  const [pending, setPending] = useState<PendingBooking | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inFlight = useRef<AbortController | null>(null);
@@ -88,6 +101,8 @@ export function ChatWindow({
               content: turn.content,
             })),
             ...(action ? { action } : {}),
+            // In the envelope, never in a message. See the route's header.
+            ...(manageToken ? { manageToken } : {}),
           }),
         });
 
@@ -97,6 +112,9 @@ export function ChatWindow({
           { role: 'assistant', content: data.reply, degraded: data.degraded },
         ]);
         setAttachments(data.attachments ?? []);
+        // A booking came back: the pending card has done its job and must not
+        // stay on screen offering to book the same slot again.
+        if ((data.attachments ?? []).some((item) => item.kind === 'booking')) setPending(null);
       } catch (failure) {
         if ((failure as { name?: string })?.name === 'AbortError') return;
         // A silent failure reads as the assistant ignoring them.
@@ -106,11 +124,15 @@ export function ChatWindow({
         inFlight.current = null;
       }
     },
-    [busy, turns],
+    [busy, turns, manageToken],
   );
 
   const services = attachments.find((item) => item.kind === 'services');
   const availability = attachments.find((item) => item.kind === 'availability');
+  const conflict = attachments.find((item) => item.kind === 'conflict');
+  const booking = attachments.find((item) => item.kind === 'booking') as
+    | BookingAttachment
+    | undefined;
   const showSuggestions = turns.length === 1 && !busy;
 
   return (
@@ -154,20 +176,90 @@ export function ChatWindow({
           />
         )}
 
-        {!busy && availability && (
+        {!busy && availability && !pending && (
           <AvailabilityOptions
             attachment={availability}
             disabled={busy}
-            onChoose={(option) =>
+            onChoose={(option) => {
+              // Choosing is not confirming. This only opens the summary card;
+              // nothing is written until the button on it is pressed.
+              setPending({
+                serviceId: option.serviceId,
+                serviceName: availability.serviceName,
+                date: availability.date,
+                time: option.label,
+                startsAt: option.startsAt,
+                staffId: option.staffId,
+                staffName: option.staffName,
+                price: option.price,
+              });
               void send(`${option.label} please.`, {
                 kind: 'slot',
                 serviceId: option.serviceId,
                 startsAt: option.startsAt,
                 staffId: option.staffId,
+              });
+            }}
+          />
+        )}
+
+        {/* The slot went while they were confirming. Same projection, so a
+            tapped alternative behaves exactly like a first choice. */}
+        {!busy && conflict && (
+          <AvailabilityOptions
+            attachment={{
+              kind: 'availability',
+              serviceId: conflict.serviceId,
+              serviceName: conflict.serviceName,
+              date: conflict.date,
+              timezone: conflict.timezone,
+              staffPinned: conflict.staffPinned,
+              servicePrice: conflict.servicePrice,
+              sampleData: false,
+              options: conflict.options,
+            }}
+            disabled={busy}
+            onChoose={(option) => {
+              setPending({
+                serviceId: option.serviceId,
+                serviceName: conflict.serviceName,
+                date: conflict.date,
+                time: option.label,
+                startsAt: option.startsAt,
+                staffId: option.staffId,
+                staffName: option.staffName,
+                price: option.price,
+              });
+              void send(`${option.label} instead please.`, {
+                kind: 'slot',
+                serviceId: option.serviceId,
+                startsAt: option.startsAt,
+                staffId: option.staffId,
+              });
+            }}
+          />
+        )}
+
+        {!busy && pending && (
+          <BookingSummary
+            pending={pending}
+            disabled={busy}
+            onConfirm={(details) =>
+              void send('Yes, please book that.', {
+                kind: 'confirm_booking',
+                serviceId: pending.serviceId,
+                startsAt: pending.startsAt,
+                staffId: pending.staffId,
+                name: details.name,
+                phone: details.phone,
+                email: details.email,
+                idempotencyKey: details.idempotencyKey,
               })
             }
           />
         )}
+
+        {!busy && booking && <ManageLink attachment={booking} />}
 
         {showSuggestions && <SuggestionButtons disabled={busy} onPick={(text) => void send(text)} />}
         {busy && <ChatThinking />}

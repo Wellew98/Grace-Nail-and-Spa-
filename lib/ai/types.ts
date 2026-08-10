@@ -167,11 +167,36 @@ export interface ToolCallRequest extends GenerateRequest {
 // The four read-only tools
 // ---------------------------------------------------------------------------
 
+/**
+ * The tools the MODEL may call. All read-only.
+ *
+ * ---------------------------------------------------------------------------
+ * THE WRITE TOOLS ARE DELIBERATELY NOT IN THIS LIST.
+ *
+ * `createBookingTool`, `cancelBookingTool` and `rescheduleBookingTool` exist in
+ * tools.ts and call the existing transaction in lib/booking.ts — but they are
+ * executed by the SERVER in response to an explicit customer tap, and are never
+ * offered to the model.
+ *
+ * The batch requires that the assistant never books "because the customer said
+ * something that sounded like yes". A declared write tool makes that a property
+ * of the prompt: the model is asked to be careful, and one confidently misread
+ * "go on then" is a real appointment in the diary. Undeclared, it is a property
+ * of the architecture — there is no token the model can emit that reaches
+ * `createBooking`, however it is argued with.
+ *
+ * What the model does instead is narrate: the tap authorises, the server
+ * executes, and the outcome comes back as a tool turn for the model to put into
+ * a sentence. It cannot invent the outcome either, because the result it is
+ * narrating is the one the database returned.
+ * ---------------------------------------------------------------------------
+ */
 export const TOOL_NAMES = [
   'get_business_info',
   'get_services',
   'get_staff',
   'check_availability',
+  'get_booking',
 ] as const;
 
 export type ToolName = (typeof TOOL_NAMES)[number];
@@ -185,6 +210,8 @@ export type ToolFailure =
   | 'not_found'
   /** The request was well formed but outside what the business allows. */
   | 'out_of_range'
+  /** No manage token in the envelope — the customer has not proved ownership. */
+  | 'no_booking_held'
   /** The data layer failed. */
   | 'unavailable';
 
@@ -242,6 +269,8 @@ export interface AvailabilityAttachment {
   kind: 'availability';
   serviceId: string;
   serviceName: string;
+  /** Carried so the confirmation card need not look the price up again. */
+  servicePrice: string;
   date: string;
   timezone: string;
   /**
@@ -259,7 +288,82 @@ export interface AvailabilityAttachment {
   options: AvailabilityOption[];
 }
 
-export type ChatAttachment = ServicesAttachment | AvailabilityAttachment;
+/**
+ * A booking, as the MODEL is allowed to see it.
+ *
+ * ---------------------------------------------------------------------------
+ * NO NAME, NO PHONE, NO TOKEN — and this is the first tool that could have
+ * leaked them.
+ *
+ * Batch A's redaction covers customer-authored turns only. That is sound while
+ * every tool result is assembled field by field out of business data, because
+ * there is then nothing personal in the assembly to leak. `get_booking` reads a
+ * row that joins `customers`, which ends that guarantee — `AppointmentDetail`
+ * carries `customer_name`, `customer_phone`, `customer_email` and
+ * `manage_token`, and returning it whole would put all four into a third
+ * party's logs.
+ *
+ * So this type exists to make the safe subset the only thing that can be built.
+ * It is what the model needs to DISCUSS an appointment and nothing else; the
+ * client already holds the name, the phone and the token, and renders them
+ * itself. `tests/ai/privacy.test.ts` asserts this directly rather than trusting
+ * the reviewer of the next change to notice.
+ * ---------------------------------------------------------------------------
+ */
+export interface BookingView {
+  service: string;
+  date: string;
+  time: string;
+  with: string;
+  status: string;
+  /** Can the customer still change it themselves, or is it inside notice? */
+  can_change: boolean;
+}
+
+/** A booking as the CLIENT renders it — same row, the customer's own details. */
+export interface BookingCard {
+  appointmentId: string;
+  serviceName: string;
+  date: string;
+  time: string;
+  startsAt: string;
+  staffName: string;
+  status: string;
+  price: string;
+  manageUrl: string;
+  canChange: boolean;
+}
+
+export interface BookingAttachment {
+  kind: 'booking';
+  booking: BookingCard;
+  /** True the moment the transaction returned success, never before. */
+  justBooked: boolean;
+}
+
+/**
+ * The slot went while the customer was confirming.
+ *
+ * Carries alternatives in the SAME shape as `AvailabilityAttachment.options`,
+ * which is the whole point of the type existing. See the note in tools.ts.
+ */
+export interface ConflictAttachment {
+  kind: 'conflict';
+  what: 'book' | 'reschedule';
+  serviceId: string;
+  serviceName: string;
+  servicePrice: string;
+  date: string;
+  timezone: string;
+  staffPinned: boolean;
+  options: AvailabilityOption[];
+}
+
+export type ChatAttachment =
+  | ServicesAttachment
+  | AvailabilityAttachment
+  | BookingAttachment
+  | ConflictAttachment;
 
 /**
  * One day of opening hours, as the site itself derives them: the union of every

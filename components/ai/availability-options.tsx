@@ -30,7 +30,14 @@ export function AvailabilityOptions({
   disabled,
 }: {
   attachment: AvailabilityAttachment;
-  onChoose: (option: { serviceId: string; startsAt: string; staffId: string | null; label: string }) => void;
+  onChoose: (option: {
+    serviceId: string;
+    startsAt: string;
+    staffId: string | null;
+    staffName: string;
+    label: string;
+    price: string;
+  }) => void;
   disabled: boolean;
 }) {
   if (attachment.options.length === 0) return null;
@@ -53,7 +60,9 @@ export function AvailabilityOptions({
                 serviceId: attachment.serviceId,
                 startsAt: option.startsAt,
                 staffId: attachment.staffPinned ? option.staffId : null,
+                staffName: option.staffName,
                 label: option.time,
+                price: attachment.servicePrice,
               })
             }
             className="min-h-11 rounded-xl border border-blush-200 bg-white px-3.5 py-2 text-center transition-colors hover:border-lacquer-400 disabled:opacity-50"

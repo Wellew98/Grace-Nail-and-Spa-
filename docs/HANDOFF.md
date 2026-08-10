@@ -570,3 +570,47 @@ Batch C: booking through the assistant. It must call `createBooking` in `lib/boo
 the advisory lock, the in-transaction idempotency check and the exclusion constraints are
 the point, and §21 of the spec asks for a deterministic idempotency key so a double-tap or
 a model retry cannot produce two appointments.
+
+### Batch C — booking, management, privacy
+
+The assistant can now write. Three things about how, because each is a
+deliberate reading of the brief rather than the obvious implementation:
+
+**The model has no write tool.** `createBookingTool`, `cancelBookingTool` and
+`rescheduleBookingTool` live in `lib/ai/tools.ts` and call `lib/booking.ts`
+unchanged — but they are absent from `TOOL_NAMES`, so they are never offered to
+the provider. A write happens when the customer taps a confirmation: the route
+executes it *before* the model is consulted, then hands the result over as a
+turn to narrate. "Never book because the customer said something that sounded
+like yes" is therefore a property of the wiring, not of the prompt, and the
+assistant cannot report a success the transaction did not return because the
+sentence it is narrating is built from the transaction's own result.
+
+**Name, phone and the manage token travel in the request envelope, never in
+`messages`.** They go straight to `lib/booking.ts`. `tests/ai/privacy.test.ts`
+captures everything the provider was actually handed and greps it — that test
+is the guard, because nothing else would notice a future change routing a phone
+number through the conversation.
+
+**`get_booking` is the one tool that reads a `customers` join**, so it projects
+to `BookingView`, a type with nowhere to put a name, phone or token. The client
+gets `BookingCard` with the manage link, rendered in the customer's own browser.
+
+**The 409's alternatives are re-projected.** Fresh slots from §5 step 8 come
+straight out of the engine and have never been through `check_availability`'s
+split. `conflictAlternatives()` puts them through the same rules — ISO instant,
+`staffId` only when the customer named that therapist — because otherwise the
+recovery path reintroduces the pinning bug exactly where it is hardest to see:
+under contention.
+
+**The idempotency key is a lifecycle problem.** Minted in a ref in
+`components/ai/booking-summary.tsx`, re-minted when the selection signature
+changes. Generated during render it changes per keystroke and a double tap
+books twice; held too stably it survives a change of slot and replays the
+original booking. Both directions are pinned in `tests/ai/booking-flow.test.ts`.
+
+**Not done: deployment.** This environment has no Vercel access, so the
+deploy, the deployed-commit verification and the real-model latency measurement
+in the Batch C brief were not performed. `AI_TURN_BUDGET_MS` is still set from
+an unmeasured assumption about model latency — measure a real two-tool-call turn
+before trusting it.

@@ -1,10 +1,19 @@
 import 'server-only';
 import { getAvailableSlots, getBusiness, getService } from '../availability';
+import { getAppointmentById } from '../booking';
+import { sendCustomerConfirmation, sendOwnerNotification } from '../email';
 import { getActiveStaff } from '../public-data';
 import { formatSlotLabel, todayInZone, utcToZonedDate } from '../time';
 import { classifyMessage, REFUSAL, safeError, scrubSecrets } from './safety';
 import { buildSystemPrompt } from './system-prompt';
-import { TOOL_DECLARATIONS, executeTool, type ToolContext } from './tools';
+import {
+  TOOL_DECLARATIONS,
+  cancelBookingTool,
+  createBookingTool,
+  executeTool,
+  rescheduleBookingTool,
+  type ToolContext,
+} from './tools';
 import type { AIProvider } from './provider';
 import type {
   AIFailure,
@@ -106,6 +115,8 @@ export interface OrchestrateRequest {
   limits?: Limits;
   now?: Date;
   signal?: AbortSignal;
+  /** From the request envelope. Reaches `get_booking`, never the conversation. */
+  manageToken?: string | null;
 }
 
 export interface OrchestrateResult {
@@ -145,7 +156,7 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
     today: todayInZone(business.timezone, now),
   });
 
-  const context: ToolContext = { businessId, now };
+  const context: ToolContext = { businessId, now, manageToken: request.manageToken ?? null };
   const turns: AIMessage[] = [...messages];
   const attachments: ChatAttachment[] = [];
 
@@ -249,9 +260,170 @@ function providerFailure(
 // Structured actions from the client
 // ---------------------------------------------------------------------------
 
-export type ClientAction =
+/**
+ * A tap that only CONTINUES the conversation. Nothing is written.
+ */
+export type ConversationAction =
   | { kind: 'service'; serviceId: string }
   | { kind: 'slot'; serviceId: string; startsAt: string; staffId?: string | null };
+
+/**
+ * A tap that WRITES. Everything the write needs is carried here, because none
+ * of it may be taken from the model: the identity comes from the customer's own
+ * client, and the idempotency key was minted at the moment they pressed the
+ * button (see components/ai/chat-window.tsx).
+ *
+ * Kept a separate type from ConversationAction so the compiler enforces the
+ * split — `describeAction` cannot be handed a write, and `performWrite` cannot
+ * be handed a browse. That is one fewer thing resting on a reviewer noticing.
+ */
+export type WriteAction =
+  | {
+      kind: 'confirm_booking';
+      serviceId: string;
+      startsAt: string;
+      staffId?: string | null;
+      name: string;
+      phone: string;
+      email?: string | null;
+      idempotencyKey: string;
+    }
+  | { kind: 'confirm_cancel' }
+  | { kind: 'confirm_reschedule'; startsAt: string; staffId?: string | null };
+
+export type ClientAction = ConversationAction | WriteAction;
+
+/** The three taps that write. Everything else only continues the conversation. */
+export function isWriteAction(action: ClientAction): action is WriteAction {
+  return (
+    action.kind === 'confirm_booking' ||
+    action.kind === 'confirm_cancel' ||
+    action.kind === 'confirm_reschedule'
+  );
+}
+
+export interface WriteOutcomeForClient {
+  /** The turn the assistant is asked to narrate. Never invented by the model. */
+  turn: string;
+  attachment: ChatAttachment | null;
+}
+
+/**
+ * Perform a confirmed write, then hand the RESULT to the conversation.
+ *
+ * ---------------------------------------------------------------------------
+ * THE TAP AUTHORISES, THE SERVER EXECUTES, THE MODEL NARRATES.
+ *
+ * The model is not asked whether to book. It is told what happened and asked to
+ * put it into a sentence. That ordering is what makes "never book because the
+ * customer said something that sounded like yes" true by construction rather
+ * than by instruction — and it also means the assistant cannot report a success
+ * the database did not return, because the sentence it is narrating is built
+ * from the transaction's own result.
+ *
+ * A failure is narrated just as plainly. §5 step 8's `slot_taken` is an
+ * expected outcome, not an error: somebody booked it through /book while this
+ * conversation was open. No retry, no force, no claim of success.
+ * ---------------------------------------------------------------------------
+ */
+export async function performWrite(
+  action: WriteAction,
+  context: ToolContext,
+): Promise<WriteOutcomeForClient | null> {
+  if (action.kind === 'confirm_booking') {
+    const startsAt = new Date(action.startsAt);
+    if (Number.isNaN(startsAt.getTime())) return null;
+
+    const outcome = await createBookingTool(context, {
+      serviceId: action.serviceId,
+      startsAt,
+      staffId: action.staffId ?? null,
+      name: action.name,
+      phone: action.phone,
+      email: action.email ?? null,
+      idempotencyKey: action.idempotencyKey,
+    });
+
+    if (outcome.ok) {
+      // The confirmation email is dispatched by the same helpers /book uses —
+      // not a second mail path. A replay must not send a second copy.
+      if (!outcome.replayed) void sendConfirmationFor(outcome.appointmentId);
+      return {
+        turn: `[The booking was written to the database and confirmed. ${describe(outcome.data)} Tell the guest it is booked, and that their confirmation and booking link are on the way.]`,
+        attachment: outcome.client,
+      };
+    }
+
+    return {
+      turn:
+        outcome.error === 'slot_taken'
+          ? '[The booking FAILED: somebody else took that time while the guest was confirming. Say so plainly, apologise briefly, and offer the alternative times shown. Do not say it is booked.]'
+          : `[The booking FAILED and nothing was written. Reason: ${outcome.message} Tell the guest plainly. Do not say it is booked.]`,
+      attachment: outcome.client ?? null,
+    };
+  }
+
+  if (action.kind === 'confirm_cancel') {
+    const outcome = await cancelBookingTool(context);
+    return outcome.ok
+      ? { turn: '[The booking is now cancelled in the database. Confirm that to the guest.]', attachment: outcome.client }
+      : { turn: `[The cancellation FAILED and the booking still stands. Reason: ${outcome.message} Tell the guest plainly.]`, attachment: null };
+  }
+
+  if (action.kind === 'confirm_reschedule') {
+    const startsAt = new Date(action.startsAt);
+    if (Number.isNaN(startsAt.getTime())) return null;
+
+    const outcome = await rescheduleBookingTool(context, {
+      startsAt,
+      staffId: action.staffId ?? null,
+    });
+
+    if (outcome.ok) {
+      if (!outcome.replayed) void sendConfirmationFor(outcome.appointmentId);
+      return {
+        turn: `[The booking was moved in the database. ${describe(outcome.data)} Confirm the new time to the guest and tell them their existing booking link still works.]`,
+        attachment: outcome.client,
+      };
+    }
+
+    return {
+      turn:
+        outcome.error === 'slot_taken'
+          ? '[The move FAILED: that time went while the guest was confirming, and the ORIGINAL booking is unchanged. Say so and offer the alternatives shown.]'
+          : `[The move FAILED and the original booking is unchanged. Reason: ${outcome.message} Tell the guest plainly.]`,
+      attachment: outcome.client ?? null,
+    };
+  }
+
+  return null;
+}
+
+/** Non-personal facts only — service, date, time, therapist. Never who. */
+function describe(data: Record<string, unknown>): string {
+  const parts = [data.service, data.date, data.time, data.with].filter(Boolean);
+  return parts.length ? `It is ${parts.join(', ')}.` : '';
+}
+
+/**
+ * The same helpers /book uses, not a second mail path.
+ *
+ * Fire-and-forget for the same reason the booking route uses `after()`: a
+ * booking safely in the database must never be reported as a failure because a
+ * mail server had a bad minute. lib/email.ts already never throws into a write
+ * path; this catch is belt and braces around the dispatch itself.
+ */
+async function sendConfirmationFor(appointmentId: string): Promise<void> {
+  try {
+    const detail = await getAppointmentById(appointmentId);
+    if (!detail) return;
+    await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+  } catch (error) {
+    console.error('[ai] confirmation email failed', {
+      message: error instanceof Error ? error.message : 'unknown error',
+    });
+  }
+}
 
 /**
  * Turn a tapped button into a customer turn — after checking it against the
@@ -275,7 +447,7 @@ export type ClientAction =
  * ---------------------------------------------------------------------------
  */
 export async function describeAction(
-  action: ClientAction,
+  action: ConversationAction,
   context: ToolContext,
 ): Promise<string | null> {
   const business = await getBusiness(context.businessId);

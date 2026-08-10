@@ -72,6 +72,13 @@ const SCHEMAS = {
   get_services: noArguments,
   get_staff: noArguments,
   check_availability: checkAvailabilityArgs,
+  /**
+   * No arguments, and `noArguments` is strict, so a model that tries to pass a
+   * manage token, an appointment id or a customer name is REJECTED here rather
+   * than having the extra field quietly ignored. Which booking is being read is
+   * decided by the token in ToolContext and by nothing the model can say.
+   */
+  get_booking: noArguments,
 } as const satisfies Record<ToolName, z.ZodType>;
 
 export function isToolName(name: unknown): name is ToolName {
