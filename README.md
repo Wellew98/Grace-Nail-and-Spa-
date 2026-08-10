@@ -414,4 +414,10 @@ docs/HANDOFF.md       context for continuing in a new session
 ## Not built, by instruction
 
 Payments, deposits, customer accounts, loyalty, analytics, marketing email, multi-tenant
-admin UI, chatbot. Phases 3–5. Spec §0 and §8.
+admin UI. Phases 3–5. Spec §0 and §8.
+
+**The booking assistant is being built** and is no longer a non-goal — v2 §0 has been
+amended. `lib/ai/` currently holds the provider seam and four read-only tools; there is no
+route and no UI yet, so nothing in it is reachable from the running site. It is an interface
+to the booking engine and never the authority on a slot: delete `lib/ai` and the booking
+system is exactly what it was.

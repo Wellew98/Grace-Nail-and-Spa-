@@ -116,14 +116,38 @@ function describeTransportFailure(error: unknown): AIFailureResult {
   return failure('unavailable', detail, true);
 }
 
+/**
+ * ---------------------------------------------------------------------------
+ * REDACTION APPLIES TO WHAT THE CUSTOMER WROTE, AND ONLY THAT.
+ *
+ * A blanket sweep over every turn looks safer and is not: `get_business_info`
+ * returns the studio's OWN phone number, which is public, is on the footer of
+ * every page, and is the answer to "how do I reach you?". Redacting it makes
+ * the assistant unable to give out the number the whole site advertises — and
+ * silently, because nothing throws.
+ *
+ * Scoping it to user turns loses nothing. A customer's details can only enter
+ * this conversation through a turn the customer wrote; if those are cleaned,
+ * the model never sees one, so it can never put one into a turn of its own.
+ * Everything on the other side is ours: tool results are built field by field
+ * from `lib/ai/tools.ts`, where no tool can reach a customer, an appointment or
+ * an admin row.
+ *
+ * The residue: a customer who types the STUDIO's number back at us has it
+ * redacted too. That is a slightly odd reply, not a leak, and fixing it would
+ * mean handing the provider a copy of the business row — coupling the seam to
+ * the data layer to buy nothing.
+ * ---------------------------------------------------------------------------
+ */
 function toGeminiContents(messages: AIMessage[]) {
   return messages.map((message) => ({
     role: message.role === 'assistant' ? 'model' : 'user',
-    // The last gate before anything leaves this process. See the note on
-    // redactPersonalDetails() — the prompt and the client are both told to keep
-    // personal details out of the conversation, and this is what makes it true
-    // when one of them forgets.
-    parts: [{ text: redactPersonalDetails(message.content) }],
+    parts: [
+      {
+        text:
+          message.role === 'user' ? redactPersonalDetails(message.content) : message.content,
+      },
+    ],
   }));
 }
 

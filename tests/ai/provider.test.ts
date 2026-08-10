@@ -180,6 +180,43 @@ describe('generating a response', () => {
     expect(body).toContain(REDACTED_EMAIL);
   });
 
+  it("does not strip the studio's own phone number out of a tool result", async () => {
+    // The number get_business_info returns is public, is on the footer of every
+    // page, and is the answer to "how do I reach you?". A blanket sweep over
+    // every turn would delete it and nothing would throw — the assistant would
+    // simply become unable to give out the number the site advertises.
+    const { impl, calls } = stubFetch(200, textResponse('ok'));
+    await provider(impl).generateResponse({
+      ...ask,
+      messages: [
+        { role: 'user', content: 'how do I reach you?' },
+        { role: 'assistant', content: '{"phone":"063 352 5374","name":"Grace Nails and Beauty Spa"}' },
+        { role: 'user', content: 'thanks' },
+      ],
+    });
+
+    expect(String(calls[0].init.body)).toContain('063 352 5374');
+  });
+
+  it('still strips a number the customer wrote, in the same conversation', async () => {
+    // The scoping must not be a way of switching redaction off. A customer's
+    // details can only arrive in a turn the customer wrote, and that turn is
+    // exactly the one still being cleaned.
+    const { impl, calls } = stubFetch(200, textResponse('ok'));
+    await provider(impl).generateResponse({
+      ...ask,
+      messages: [
+        { role: 'assistant', content: 'We are on 063 352 5374.' },
+        { role: 'user', content: 'Mine is 082 555 0101' },
+      ],
+    });
+
+    const body = String(calls[0].init.body);
+    expect(body).toContain('063 352 5374');
+    expect(body).not.toContain('082 555 0101');
+    expect(body).toContain(REDACTED_PHONE);
+  });
+
   it('leaves times, prices, dates and durations alone', async () => {
     const { impl, calls } = stubFetch(200, textResponse('ok'));
     await provider(impl).generateResponse({

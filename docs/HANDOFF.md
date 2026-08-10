@@ -296,7 +296,14 @@ page offline.
 she has used the admin for a full week and build against what she actually opens.
 
 **Explicitly out of scope** — Phases 4–5, and everything in v2 §0's non-goals: payments,
-customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI, chatbot.
+customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI.
+
+**No longer out of scope: the booking assistant.** v2 §0 used to list "no chatbot" and has
+been amended — read that section before touching `lib/ai/`. It is an interface to the
+booking engine, not a second one: it reads the same rows the site renders, it calls §6
+rather than reimplementing it, a booking still goes through §7 in full, and no personal data
+reaches the model. Delete `lib/ai` and the booking system is exactly what it was; that is
+the property to preserve.
 
 ---
 

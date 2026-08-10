@@ -120,8 +120,13 @@ export function validateToolCall(name: unknown, rawArgs: unknown): ValidationOut
 }
 
 /**
- * Strip anything that looks like a phone number out of text on its way to the
- * provider.
+ * Strip anything that looks like a phone number out of text a CUSTOMER wrote,
+ * on its way to the provider.
+ *
+ * Who this is applied to matters as much as what it does, and the caller
+ * decides: `gemini.ts` runs it over user turns only, never over tool results —
+ * one of which is the studio's own public phone number. Read the note above
+ * `toGeminiContents` before widening it.
  *
  * ---------------------------------------------------------------------------
  * WHY THIS IS HERE AND NOT ONLY IN THE PROMPT

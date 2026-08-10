@@ -24,8 +24,37 @@ Read in this order:
 The rest is reference: unchanged from v1 except where marked **[v2]**.
 
 **Non-goals, unchanged:** no payments, no customer accounts, no loyalty, no analytics
-dashboards, no marketing email, no multi-tenant admin UI, no chatbot. Do not add features
+dashboards, no marketing email, no multi-tenant admin UI. Do not add features
 not in this document. If something is ambiguous, ask rather than invent.
+
+### [v2, amended] The booking assistant is authorised
+
+"No chatbot" was a non-goal in v1 and in v2 as first written. **It is not one any more.**
+The line is struck here rather than quietly ignored: a non-goal left standing next to the
+code that contradicts it is how a later session comes to helpfully delete working software,
+correctly, by this document's own instruction.
+
+What is authorised is an **interface to the booking engine** — not a replacement for it and
+not a second one. The distinction is the whole of the permission:
+
+- It reads the same rows the site renders, through `lib/public-data.ts` and
+  `lib/availability.ts`. It holds no catalogue of its own, so an owner's edit in Admin >
+  Setup reaches it with no code change and it cannot contradict the page it sits on.
+- **It never becomes the authority on a slot.** `check_availability` calls §6; it does not
+  reimplement any part of it. A booking still goes through §7 in full — the advisory lock,
+  the availability re-check, and the exclusion constraints that are the actual authority
+  (§2). Nothing in the assistant may weaken that path.
+- It cannot read `customers`, `appointments`, `business_members` or anything in the auth
+  tables. No customer's name, phone, email or history enters the model's context.
+- It is optional at runtime. Unconfigured, `getProvider()` returns null, the assistant is
+  simply absent, and every other path is untouched.
+
+**The test of whether it is still an interface:** delete `lib/ai` and the booking system is
+exactly what it was. If that ever stops being true, something has been built in the wrong
+place.
+
+Lives in `lib/ai/`, specified separately. Phases 4 and 5 remain out of scope, and the rest
+of the non-goals above are unchanged.
 
 ---
 

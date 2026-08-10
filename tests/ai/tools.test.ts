@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getAvailableSlots } from '@/lib/availability';
 import { createBooking } from '@/lib/booking';
 import { query } from '@/lib/db';
+import { GeminiProvider } from '@/lib/ai/gemini';
 import {
   checkAvailability,
   executeTool,
@@ -398,6 +399,41 @@ describe('the placeholder menu', () => {
       date: nextWorkingDate(),
     });
     expect(availability.ok && availability.data.sample_data).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What actually reaches the model
+// ---------------------------------------------------------------------------
+
+describe('a tool result on its way to the provider', () => {
+  it("keeps the studio's phone number, read from the row and sent intact", async () => {
+    // The two halves of this are tested apart; this is the join, because the
+    // bug it guards against lives only in the join. get_business_info reads a
+    // real number out of the businesses row, the provider redacts phone-shaped
+    // text, and a redactor that did not know whose number it was looking at
+    // would quietly delete the one the whole site advertises.
+    const info = await getBusinessInfo(context);
+    expect(info.phone).toBe('063 352 5374');
+
+    const sent: string[] = [];
+    const fetchImpl = (async (_url: string, init: RequestInit) => {
+      sent.push(String(init.body));
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+
+    await new GeminiProvider({ apiKey: 'k', model: 'm', fetchImpl }).generateResponse({
+      systemPrompt: 'rules',
+      messages: [
+        { role: 'user', content: 'how do I reach you?' },
+        { role: 'assistant', content: JSON.stringify(info) },
+      ],
+    });
+
+    expect(sent[0]).toContain(info.phone);
   });
 });
 
