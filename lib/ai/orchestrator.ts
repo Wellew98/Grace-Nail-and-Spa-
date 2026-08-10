@@ -18,6 +18,7 @@ import type { AIProvider } from './provider';
 import type {
   AIFailure,
   AIMessage,
+  AIResult,
   ChatAttachment,
   EnvLike,
 } from './types';
@@ -126,6 +127,23 @@ export interface OrchestrateResult {
   degraded: boolean;
 }
 
+/**
+ * Call the provider, retrying once on intermittent failures.
+ *
+ * Gemini's free tier occasionally returns an empty candidate — a known,
+ * intermittent provider bug (github.com/livekit/agents/issues/4066). One retry
+ * covers it without multiplying latency under a real outage.
+ */
+async function withRetry<T>(
+  fn: () => Promise<AIResult<T>>,
+  label: string,
+): Promise<AIResult<T>> {
+  const result = await fn();
+  if (result.ok || !result.retryable) return result;
+  console.warn('[ai] retrying after retryable failure', { label, detail: result.detail });
+  return fn();
+}
+
 export async function orchestrate(request: OrchestrateRequest): Promise<OrchestrateResult> {
   const { messages, businessId, provider, signal } = request;
   const limits = request.limits ?? limitsFrom();
@@ -169,14 +187,18 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
   for (let executed = 0; executed < limits.maxToolCalls; executed++) {
     if (remaining() <= 0) return outOfTime(attachments);
 
-    const result = await provider.generateToolCall({
-      systemPrompt,
-      messages: turns,
-      tools: TOOL_DECLARATIONS,
-      maxOutputTokens: limits.maxOutputTokens,
-      timeoutMs: remaining(),
-      signal,
-    });
+    const result = await withRetry(
+      () =>
+        provider.generateToolCall({
+          systemPrompt,
+          messages: turns,
+          tools: TOOL_DECLARATIONS,
+          maxOutputTokens: limits.maxOutputTokens,
+          timeoutMs: remaining(),
+          signal,
+        }),
+      `tool-call-${executed}`,
+    );
 
     if (!result.ok) return providerFailure(result.failure, result.detail, attachments);
 
@@ -210,13 +232,17 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
   // answer with what it already has rather than asking for a fifth thing.
   if (remaining() <= 0) return outOfTime(attachments);
 
-  const final = await provider.generateResponse({
-    systemPrompt,
-    messages: turns,
-    maxOutputTokens: limits.maxOutputTokens,
-    timeoutMs: remaining(),
-    signal,
-  });
+  const final = await withRetry(
+    () =>
+      provider.generateResponse({
+        systemPrompt,
+        messages: turns,
+        maxOutputTokens: limits.maxOutputTokens,
+        timeoutMs: remaining(),
+        signal,
+      }),
+    'final-response',
+  );
 
   if (!final.ok) return providerFailure(final.failure, final.detail, attachments);
   return { reply: finalText(final.value.text), attachments, degraded: false };

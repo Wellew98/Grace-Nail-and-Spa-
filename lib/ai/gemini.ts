@@ -378,7 +378,10 @@ export class GeminiProvider implements AIProvider {
 
     const parts = candidate.content?.parts;
     if (!Array.isArray(parts)) {
-      return failure('malformed_response', 'the provider returned a candidate with no parts');
+      // Gemini occasionally returns a candidate with finish_reason STOP and no
+      // parts at all — a known provider bug (github.com/livekit/agents/issues/4066)
+      // that is intermittent and worth retrying before giving up.
+      return failure('malformed_response', 'the provider returned a candidate with no parts', true);
     }
 
     return { ok: true, value: parts as GeminiPart[] };
