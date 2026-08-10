@@ -17,6 +17,7 @@ import {
 import type { AIProvider } from './provider';
 import type {
   AIFailure,
+  AIFailureResult,
   AIMessage,
   AIResult,
   ChatAttachment,
@@ -134,14 +135,22 @@ export interface OrchestrateResult {
  * intermittent provider bug (github.com/livekit/agents/issues/4066). One retry
  * covers it without multiplying latency under a real outage.
  */
+/** Narrow an AIResult to its failure branch. Needed because TypeScript cannot
+ * narrow generic discriminated unions inside a conditional. */
+function isRetryable<T>(result: AIResult<T>): result is AIResult<T> & AIFailureResult {
+  return !result.ok && (result as AIFailureResult).retryable;
+}
+
 async function withRetry<T>(
   fn: () => Promise<AIResult<T>>,
   label: string,
 ): Promise<AIResult<T>> {
   const result = await fn();
-  if (result.ok || !result.retryable) return result;
-  console.warn('[ai] retrying after retryable failure', { label, detail: result.detail });
-  return fn();
+  if (isRetryable(result)) {
+    console.warn('[ai] retrying after retryable failure', { label, detail: result.detail });
+    return fn();
+  }
+  return result;
 }
 
 export async function orchestrate(request: OrchestrateRequest): Promise<OrchestrateResult> {
@@ -222,6 +231,7 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
     turns.push({
       role: 'tool',
       toolName: outcome.tool,
+      toolCallId: toolCall.id,
       // Only the model projection crosses back into the conversation. The
       // client projection carries ids and never goes near the provider.
       content: JSON.stringify(outcome.ok ? outcome.data : { error: outcome.error, message: outcome.message }),

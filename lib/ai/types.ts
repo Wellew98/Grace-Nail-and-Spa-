@@ -25,7 +25,7 @@
 export type EnvLike = Record<string, string | undefined>;
 
 /** The only provider implemented. The application never names it directly. */
-export type ProviderName = 'gemini';
+export type ProviderName = 'gemini' | 'deepseek';
 
 /**
  * How long any single provider call may take.
@@ -112,6 +112,11 @@ export interface AIMessage {
   toolCall?: AIToolCall;
   /** Tool turns only: which tool this answers. */
   toolName?: string;
+  /**
+   * Tool turns only: the call id this result answers (OpenAI wire format).
+   * Gemini does not use this; DeepSeek does.
+   */
+  toolCallId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +140,8 @@ export interface AIToolDeclaration {
 
 /** What the model asked for. Untrusted: every field is validated before use. */
 export interface AIToolCall {
+  /** Provider-assigned id, needed to pair tool results in OpenAI wire format. */
+  id?: string;
   name: string;
   args: Record<string, unknown>;
 }

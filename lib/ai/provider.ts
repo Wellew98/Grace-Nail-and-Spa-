@@ -1,4 +1,5 @@
 import 'server-only';
+import { DeepSeekProvider } from './deepseek';
 import { GeminiProvider } from './gemini';
 import type {
   AIResult,
@@ -66,8 +67,10 @@ export interface AIProvider {
  */
 export function selectedProvider(env: EnvLike = process.env): ProviderName | null {
   const explicit = env.AI_PROVIDER?.trim().toLowerCase();
+  if (explicit === 'deepseek') return 'deepseek';
   if (explicit === 'gemini') return 'gemini';
 
+  if (env.DEEPSEEK_API_KEY) return 'deepseek';
   if (env.GEMINI_API_KEY) return 'gemini';
   return null;
 }
@@ -84,17 +87,18 @@ export function providerConfigProblem(env: EnvLike = process.env): string | null
   // pasted into a NEXT_PUBLIC_ variable, which Next inlines into the browser
   // bundle. An AI key there is a key anyone can read and spend.
   const publicKey = Object.keys(env).find(
-    (key) => key.startsWith('NEXT_PUBLIC_') && /GEMINI|AI_KEY|API_KEY/i.test(key),
+    (key) => key.startsWith('NEXT_PUBLIC_') && /GEMINI|DEEPSEEK|AI_KEY|API_KEY/i.test(key),
   );
   if (publicKey) {
-    return `${publicKey} is a NEXT_PUBLIC_ variable, so it is inlined into the browser bundle and readable by every visitor. Move the key to GEMINI_API_KEY (server only) and rotate it.`;
+    return `${publicKey} is a NEXT_PUBLIC_ variable, so it is inlined into the browser bundle and readable by every visitor. Move the key to a server-only variable and rotate it.`;
   }
 
   const provider = selectedProvider(env);
   if (!provider) {
-    return 'No AI provider configured. Set AI_PROVIDER=gemini, GEMINI_API_KEY and AI_MODEL.';
+    return 'No AI provider configured. Set AI_PROVIDER=deepseek or gemini, the matching API key, and AI_MODEL.';
   }
-  if (!env.GEMINI_API_KEY) return 'GEMINI_API_KEY is not set.';
+  if (provider === 'deepseek' && !env.DEEPSEEK_API_KEY) return 'DEEPSEEK_API_KEY is not set.';
+  if (provider === 'gemini' && !env.GEMINI_API_KEY) return 'GEMINI_API_KEY is not set.';
   if (!env.AI_MODEL?.trim()) {
     return 'AI_MODEL is not set. There is deliberately no default: a model name baked into the code outlives its own deprecation, and the first symptom is a 404 from the provider months later.';
   }
@@ -122,6 +126,13 @@ export function getProvider(
   if (providerConfigProblem(env)) return null;
 
   switch (selectedProvider(env)) {
+    case 'deepseek':
+      return new DeepSeekProvider({
+        apiKey: env.DEEPSEEK_API_KEY!,
+        model: env.AI_MODEL!.trim(),
+        timeoutMs: env.AI_TIMEOUT_MS ? Number(env.AI_TIMEOUT_MS) : undefined,
+        ...options,
+      });
     case 'gemini':
       return new GeminiProvider({
         apiKey: env.GEMINI_API_KEY!,
