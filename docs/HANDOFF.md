@@ -296,7 +296,14 @@ page offline.
 she has used the admin for a full week and build against what she actually opens.
 
 **Explicitly out of scope** — Phases 4–5, and everything in v2 §0's non-goals: payments,
-customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI, chatbot.
+customer accounts, loyalty, analytics, marketing email, multi-tenant admin UI.
+
+**No longer out of scope: the booking assistant.** v2 §0 used to list "no chatbot" and has
+been amended — read that section before touching `lib/ai/`. It is an interface to the
+booking engine, not a second one: it reads the same rows the site renders, it calls §6
+rather than reimplementing it, a booking still goes through §7 in full, and no personal data
+reaches the model. Delete `lib/ai` and the booking system is exactly what it was; that is
+the property to preserve. See §13 below for where it has got to.
 
 ---
 
@@ -490,3 +497,120 @@ message, so it reports "not verified" rather than implying otherwise.
 This is the one endpoint that can break the silence: `lib/email.ts` never throws into the
 write path, which is correct, and the cost of that correctness is that a broken mailer is
 otherwise completely invisible.
+
+---
+
+## 13. The booking assistant (`lib/ai/`, `components/ai/`, `app/api/ai/chat/`)
+
+Specified in `docs/ai-assistant-spec.md`; built in batches, whose briefs are
+`docs/ai-assistant-batch-a.md` and `-batch-b.md`. **Batches A and B are done. Booking
+through the assistant is not built** — there is no `create_booking`, `cancel_booking` or
+`reschedule_booking` tool, and the assistant cannot write anything at all.
+
+### The shape
+
+```
+lib/ai/provider.ts       the AIProvider seam. Nothing outside lib/ai imports gemini.ts
+lib/ai/gemini.ts         GeminiProvider, over REST. One call, one bounded timeout, no retries
+lib/ai/tools.ts          the four READ-ONLY tools, reading lib/public-data + lib/availability
+lib/ai/orchestrator.ts   the bounded loop, and validation of tapped buttons
+lib/ai/safety.ts         injection refusal, output scrubbing, log sanitisation
+lib/ai/rate-limit.ts     Postgres-backed, per-IP and global
+lib/ai/system-prompt.ts  rules only — no price, treatment, therapist, hour or address
+```
+
+### Things that will look wrong and are not
+
+- **`check_availability` returns two projections.** The model gets `HH:MM` and a name; the
+  browser gets the ISO instant and the resolved `staffId`. One engine call, two views. The
+  client sends the staff id back **only** when the customer actually named that therapist —
+  otherwise the resolved id is just whoever sorted first among the free, and pinning it
+  would give an indifferent customer a clash where "Anyone" would have booked someone else.
+  `resourceId` goes to neither: §7 step 4 re-resolves the room under the advisory lock.
+- **Redaction applies to customer turns only.** A blanket sweep looks safer and deletes the
+  studio's own phone number out of `get_business_info` — silently. See the note above
+  `toGeminiContents` in `gemini.ts`.
+- **The loop is `maxToolCalls` tool executions, then one final call with no tools offered.**
+  Provider calls per turn are therefore never more than `maxToolCalls + 1`. There is also a
+  whole-turn budget (`AI_TURN_BUDGET_MS`, 25s): bounding each call alone still allows five
+  calls at 20s each, and the platform would truncate that — which looks exactly like a
+  broken assistant, with no reply and no log line.
+- **Rate limiting fails CLOSED.** If the count cannot be read the assistant is refused. The
+  failure it exists to prevent is the one where something is already wrong, and if Postgres
+  is down the assistant has nothing to answer with anyway.
+- **`ai_rate_limit` stores salted hashes, never IP addresses.** An IP is personal
+  information under POPIA. The salt falls back to `SUPABASE_DB_URL` so it cannot silently
+  degrade to an unsalted hash, which for IPv4 is no protection at all.
+
+### ⚠ The chat button is decided at BUILD time, the chat route at request time
+
+`app/layout.tsx` renders the widget only when `providerConfigProblem()` returns null, and
+the layout is prerendered (`revalidate = 300`). So the button's presence is baked into the
+build, while `/api/ai/chat` reads the environment per request.
+
+**Consequence:** add `GEMINI_API_KEY` to an existing deployment without redeploying and the
+route works while no button appears, until the next revalidation or deploy. This is the
+same rule as every other variable here — "environment variables do not apply to existing
+deployments" (§7) — but these two disagreeing for a window is confusing enough to be worth
+the warning. **Set the AI variables and redeploy**, then check `/api/health`.
+
+It is this way round on purpose: a deployment with no key ships no button and no chat
+JavaScript at all, rather than a button that apologises.
+
+### Verified with the key removed
+
+Homepage 200, `/book` 200, no widget in the HTML, `/api/health` reports
+`ai: { ok: true, configured: false }` — an AI-less deployment is a healthy deployment and
+must not turn the endpoint red. With a key set: widget renders, and the key appears in
+neither the HTML nor any client chunk.
+
+### Still to build
+
+Batch C: booking through the assistant. It must call `createBooking` in `lib/booking.ts` —
+the advisory lock, the in-transaction idempotency check and the exclusion constraints are
+the point, and §21 of the spec asks for a deterministic idempotency key so a double-tap or
+a model retry cannot produce two appointments.
+
+### Batch C — booking, management, privacy
+
+The assistant can now write. Three things about how, because each is a
+deliberate reading of the brief rather than the obvious implementation:
+
+**The model has no write tool.** `createBookingTool`, `cancelBookingTool` and
+`rescheduleBookingTool` live in `lib/ai/tools.ts` and call `lib/booking.ts`
+unchanged — but they are absent from `TOOL_NAMES`, so they are never offered to
+the provider. A write happens when the customer taps a confirmation: the route
+executes it *before* the model is consulted, then hands the result over as a
+turn to narrate. "Never book because the customer said something that sounded
+like yes" is therefore a property of the wiring, not of the prompt, and the
+assistant cannot report a success the transaction did not return because the
+sentence it is narrating is built from the transaction's own result.
+
+**Name, phone and the manage token travel in the request envelope, never in
+`messages`.** They go straight to `lib/booking.ts`. `tests/ai/privacy.test.ts`
+captures everything the provider was actually handed and greps it — that test
+is the guard, because nothing else would notice a future change routing a phone
+number through the conversation.
+
+**`get_booking` is the one tool that reads a `customers` join**, so it projects
+to `BookingView`, a type with nowhere to put a name, phone or token. The client
+gets `BookingCard` with the manage link, rendered in the customer's own browser.
+
+**The 409's alternatives are re-projected.** Fresh slots from §5 step 8 come
+straight out of the engine and have never been through `check_availability`'s
+split. `conflictAlternatives()` puts them through the same rules — ISO instant,
+`staffId` only when the customer named that therapist — because otherwise the
+recovery path reintroduces the pinning bug exactly where it is hardest to see:
+under contention.
+
+**The idempotency key is a lifecycle problem.** Minted in a ref in
+`components/ai/booking-summary.tsx`, re-minted when the selection signature
+changes. Generated during render it changes per keystroke and a double tap
+books twice; held too stably it survives a change of slot and replays the
+original booking. Both directions are pinned in `tests/ai/booking-flow.test.ts`.
+
+**Not done: deployment.** This environment has no Vercel access, so the
+deploy, the deployed-commit verification and the real-model latency measurement
+in the Batch C brief were not performed. `AI_TURN_BUDGET_MS` is still set from
+an unmeasured assumption about model latency — measure a real two-tool-call turn
+before trusting it.

@@ -33,6 +33,10 @@ export default async function setup() {
   // 0004_demo_data.sql is deliberately SKIPPED. It is data, not schema, and its
   // placeholder menu would change the row counts and availability the §9
   // assertions are pinned to. Tests use §10's fixture below instead.
+  //
+  // 0005 IS applied: it is schema, and the chat route's rate limiter counts
+  // into it on every request.
+  await db.query(sql('supabase/migrations/0005_ai_rate_limit.sql'));
   await db.query(sql('supabase/seed.sql'));
   await db.end();
 }
