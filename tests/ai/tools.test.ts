@@ -206,10 +206,10 @@ describe('check_availability', () => {
     if (!result.ok) return;
 
     expect(result.data.slots.map((slot) => slot.time)).toEqual(labels(engine));
-    expect(result.data.timezone).toBe('Africa/Johannesburg');
-    // Times only, and a name. The resolved (staff_id, resource_id) pair stays
-    // server-side — spec §6.
-    expect(Object.keys(result.data.slots[0]).sort()).toEqual(['time', 'with']);
+    expect(result.data.timezone).toBeUndefined();
+    // Times only — therapist names are client-side only. The resolved
+    // (staff_id, resource_id) pair stays server-side — spec §6.
+    expect(Object.keys(result.data.slots[0]).sort()).toEqual(['time']);
     expect(JSON.stringify(result.data)).not.toContain(IDS.resource.massageRoom1);
     expect(JSON.stringify(result.data)).not.toContain(IDS.staff.sarah);
   });
@@ -317,7 +317,8 @@ describe('check_availability', () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.data.slots.every((slot) => slot.with === 'Sarah')).toBe(true);
+    // Therapist filtering still works — checked via client projection.
+    expect(result.client.options.every((opt) => opt.staffName === 'Sarah')).toBe(true);
   });
 
   it('rejects a therapist who does not exist rather than silently checking everyone', async () => {
@@ -394,11 +395,12 @@ describe('the placeholder menu', () => {
 
     expect((await getStaff(context)).sample_data).toBe(true);
 
+    // Sample data flag is only in the client projection, not the model projection.
     const availability = await checkAvailability(context, {
       service_id: IDS.service.gelManicure,
       date: nextWorkingDate(),
     });
-    expect(availability.ok && availability.data.sample_data).toBe(true);
+    expect(availability.ok && availability.client.sampleData).toBe(true);
   });
 });
 
