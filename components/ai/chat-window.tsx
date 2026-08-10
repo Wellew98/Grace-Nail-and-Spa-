@@ -117,16 +117,20 @@ export function ChatWindow({
           ...current,
           { role: 'assistant', content: data.reply, degraded: data.degraded },
         ]);
-        // Only show the services card when it's actually new — otherwise the
-        // same card re-renders on every turn, stacking duplicates for the user.
-        const newServices = (data.attachments ?? []).find((a) => a.kind === 'services');
+        // Only show the services card when it's actually new. If it hasn't
+        // changed from the last time, drop it so it doesn't stack with
+        // availability slots or crowd the conversation.
+        const incoming = data.attachments ?? [];
+        const newServices = incoming.find((a) => a.kind === 'services');
         const fingerprint = newServices ? JSON.stringify(newServices) : '';
-        if (fingerprint && fingerprint !== lastServicesRef.current) {
+        const filtered =
+          fingerprint && fingerprint === lastServicesRef.current
+            ? incoming.filter((a) => a.kind !== 'services')
+            : incoming;
+        if (newServices && fingerprint !== lastServicesRef.current) {
           lastServicesRef.current = fingerprint;
-          setAttachments(data.attachments ?? []);
-        } else if (!newServices) {
-          setAttachments(data.attachments ?? []);
         }
+        setAttachments(filtered);
         // A booking came back: the pending card has done its job and must not
         // stay on screen offering to book the same slot again.
         if ((data.attachments ?? []).some((item) => item.kind === 'booking')) setPending(null);
