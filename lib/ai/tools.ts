@@ -439,11 +439,10 @@ export async function executeTool(
         return {
           ok: true,
           tool: validated.tool,
-          // Model projection: treatment names only. No prices, durations or
-          // sample-data warnings — the UI cards show those. The model cannot
-          // repeat information it was never given.
+          // Model projection: treatment names and descriptions only. No prices,
+          // durations or sample-data warnings — the UI cards show those.
           data: {
-            services: services.services.map((s) => ({ id: s.id, name: s.name })),
+            services: services.services.map((s) => ({ id: s.id, name: s.name, description: s.description })),
           },
           client: {
             kind: 'services',
