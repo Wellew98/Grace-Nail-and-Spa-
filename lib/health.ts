@@ -12,6 +12,7 @@
  * otherwise use is one of the things that might be broken.
  */
 
+import { providerConfigProblem, selectedProvider } from './ai/provider';
 import { bareAddress, selectedTransport } from './mail';
 
 export interface Check {
@@ -51,6 +52,68 @@ export function checkEnvironment(env: EnvLike = process.env): Record<string, Che
       : { ok: false, detail: 'missing — confirmation links and JSON-LD need an absolute URL' },
 
     ...emailChecks(env),
+  };
+}
+
+export interface AiCheck extends Check {
+  configured: boolean;
+  provider: string | null;
+  modelConfigured: boolean;
+}
+
+/**
+ * The assistant's configuration — spec §57.
+ *
+ * ---------------------------------------------------------------------------
+ * REPORTED SEPARATELY FROM `environment`, AND DELIBERATELY SO.
+ *
+ * Every entry in `checkEnvironment()` is something a working deployment must
+ * have, and the endpoint returns 503 if any of them is false. The assistant is
+ * not in that category: it is an enhancement, `/book` does not depend on it,
+ * and a deployment with no AI configured is a perfectly healthy deployment. An
+ * AI entry in `environment` would 503 the health check of a site that is
+ * completely fine, which trains whoever is on call to ignore it.
+ *
+ * So `ok` here means NOT MISCONFIGURED, which is true both when the assistant
+ * is fully set up and when it is entirely absent. It is false only for the
+ * states that are actually wrong: half-configured, or a key pasted into a
+ * NEXT_PUBLIC_ variable — which is a security incident, not a nit, and should
+ * absolutely turn this endpoint red.
+ *
+ * Never returns the key, the model name, or any value.
+ * ---------------------------------------------------------------------------
+ */
+export function checkAi(env: EnvLike = process.env): AiCheck {
+  const provider = selectedProvider(env);
+  const problem = providerConfigProblem(env);
+
+  // Nothing set at all. The normal state before the AI variables are added.
+  if (!provider && !env.AI_MODEL && !env.GEMINI_API_KEY) {
+    return {
+      ok: true,
+      configured: false,
+      provider: null,
+      modelConfigured: false,
+      detail: 'no AI configured — the assistant is switched off and the rest of the site is unaffected',
+    };
+  }
+
+  if (problem) {
+    return {
+      ok: false,
+      configured: false,
+      provider,
+      modelConfigured: Boolean(env.AI_MODEL?.trim()),
+      detail: problem,
+    };
+  }
+
+  return {
+    ok: true,
+    configured: true,
+    provider,
+    modelConfigured: true,
+    detail: `${provider} configured, with a model set`,
   };
 }
 

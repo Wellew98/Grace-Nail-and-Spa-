@@ -139,16 +139,59 @@ function describeTransportFailure(error: unknown): AIFailureResult {
  * the data layer to buy nothing.
  * ---------------------------------------------------------------------------
  */
+/**
+ * A tool result has to reach the provider as an OBJECT. Anything that is not
+ * one is wrapped rather than dropped, so a malformed result still produces a
+ * turn the model can read and recover from instead of a protocol error.
+ */
+function toResponseObject(content: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    return { result: parsed };
+  } catch {
+    return { result: content };
+  }
+}
+
 function toGeminiContents(messages: AIMessage[]) {
-  return messages.map((message) => ({
-    role: message.role === 'assistant' ? 'model' : 'user',
-    parts: [
-      {
-        text:
-          message.role === 'user' ? redactPersonalDetails(message.content) : message.content,
-      },
-    ],
-  }));
+  return messages.map((message) => {
+    // A tool result. Gemini wants it back in a user-role turn as a
+    // functionResponse, paired by name with the call that asked for it.
+    if (message.role === 'tool') {
+      return {
+        role: 'user',
+        parts: [
+          {
+            functionResponse: {
+              name: message.toolName ?? 'unknown',
+              response: toResponseObject(message.content),
+            },
+          },
+        ],
+      };
+    }
+
+    // The model's own call, echoed back so the next turn has the pair it needs.
+    if (message.role === 'assistant' && message.toolCall) {
+      return {
+        role: 'model',
+        parts: [{ functionCall: { name: message.toolCall.name, args: message.toolCall.args } }],
+      };
+    }
+
+    return {
+      role: message.role === 'assistant' ? 'model' : 'user',
+      parts: [
+        {
+          text:
+            message.role === 'user' ? redactPersonalDetails(message.content) : message.content,
+        },
+      ],
+    };
+  });
 }
 
 function toFunctionDeclarations(tools: AIToolDeclaration[]) {

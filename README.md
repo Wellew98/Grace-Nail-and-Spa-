@@ -417,7 +417,19 @@ Payments, deposits, customer accounts, loyalty, analytics, marketing email, mult
 admin UI. Phases 3–5. Spec §0 and §8.
 
 **The booking assistant is being built** and is no longer a non-goal — v2 §0 has been
-amended. `lib/ai/` currently holds the provider seam and four read-only tools; there is no
-route and no UI yet, so nothing in it is reachable from the running site. It is an interface
-to the booking engine and never the authority on a slot: delete `lib/ai` and the booking
-system is exactly what it was.
+amended. It answers questions about treatments, prices, hours and availability, and it
+**cannot book, cancel or reschedule anything** — there is no write tool of any kind. It is
+an interface to the booking engine and never the authority on a slot: delete `lib/ai` and
+the booking system is exactly what it was.
+
+Configured entirely by environment variables (see `.env.example`). With none of them set,
+no chat button is rendered, no chat JavaScript is shipped, and every other page is
+untouched — verified by loading the site with `GEMINI_API_KEY` removed. `GET /api/health`
+reports whether it is configured, and `?verify=ai` asks the provider whether the key still
+works. Full notes in [`docs/HANDOFF.md`](docs/HANDOFF.md) §13; the spec is
+[`docs/ai-assistant-spec.md`](docs/ai-assistant-spec.md).
+
+**One trap worth knowing:** the chat button's presence is decided when the page is built,
+the chat route reads the environment per request. Add the AI variables to an existing
+deployment without redeploying and the route will work while the button does not appear.
+Set them and redeploy.

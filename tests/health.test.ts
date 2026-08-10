@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkEnvironment, type EnvLike } from '@/lib/health';
+import { checkAi, checkEnvironment, type EnvLike } from '@/lib/health';
 
 /**
  * The checks behind GET /api/health.
@@ -277,5 +277,55 @@ describe('the owner address', () => {
       checkEnvironment({ ...goodResend, OWNER_NOTIFICATION_EMAIL: undefined })
         .OWNER_NOTIFICATION_EMAIL.ok,
     ).toBe(false);
+  });
+});
+
+/**
+ * The assistant's configuration — spec §57.
+ *
+ * Reported apart from `checkEnvironment` on purpose, and these tests are the
+ * reason: an AI entry inside it would turn the health check of a perfectly
+ * working AI-less deployment red, which trains whoever is on call to ignore
+ * the one endpoint they are supposed to trust.
+ */
+describe('the AI configuration', () => {
+  const configured = {
+    AI_PROVIDER: 'gemini',
+    GEMINI_API_KEY: 'AIzaNotARealKey',
+    AI_MODEL: 'a-model',
+  };
+
+  it('calls a deployment with no AI healthy, because it is', () => {
+    const check = checkAi({});
+    expect(check.ok).toBe(true);
+    expect(check.configured).toBe(false);
+    expect(check.detail).toMatch(/rest of the site is unaffected/i);
+  });
+
+  it('reports the provider and that a model is set, never the values', () => {
+    const check = checkAi(configured);
+    expect(check).toMatchObject({ ok: true, configured: true, provider: 'gemini', modelConfigured: true });
+    expect(JSON.stringify(check)).not.toContain('a-model');
+    expect(JSON.stringify(check)).not.toContain('AIzaNotARealKey');
+  });
+
+  it('goes red on a half-configured deployment', () => {
+    // Half-configured is the state that produces an assistant which is present,
+    // looks configured, and fails every single request.
+    expect(checkAi({ AI_PROVIDER: 'gemini', GEMINI_API_KEY: 'AIzaNotARealKey' })).toMatchObject({
+      ok: false,
+      configured: false,
+      modelConfigured: false,
+    });
+    expect(checkAi({ AI_PROVIDER: 'gemini', AI_MODEL: 'a-model' }).ok).toBe(false);
+  });
+
+  it('goes red on a key in a NEXT_PUBLIC_ variable', () => {
+    // A security incident, not a nit: NEXT_PUBLIC_ inlines it into the browser
+    // bundle, so it is a key every visitor can read and spend.
+    const check = checkAi({ ...configured, NEXT_PUBLIC_GEMINI_API_KEY: 'leaked' });
+    expect(check.ok).toBe(false);
+    expect(check.detail).toMatch(/NEXT_PUBLIC_GEMINI_API_KEY/);
+    expect(check.detail).toMatch(/rotate/i);
   });
 });

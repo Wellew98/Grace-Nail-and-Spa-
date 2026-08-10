@@ -1,0 +1,324 @@
+import 'server-only';
+import { getAvailableSlots, getBusiness, getService } from '../availability';
+import { getActiveStaff } from '../public-data';
+import { formatSlotLabel, todayInZone, utcToZonedDate } from '../time';
+import { classifyMessage, REFUSAL, safeError, scrubSecrets } from './safety';
+import { buildSystemPrompt } from './system-prompt';
+import { TOOL_DECLARATIONS, executeTool, type ToolContext } from './tools';
+import type { AIProvider } from './provider';
+import type {
+  AIFailure,
+  AIMessage,
+  ChatAttachment,
+  EnvLike,
+} from './types';
+
+/**
+ * The bounded tool loop.
+ *
+ * ---------------------------------------------------------------------------
+ * WHAT MAKES THIS TERMINATE
+ *
+ * At most `maxToolCalls` tool executions, then exactly one final provider call
+ * with no tools offered — so the model has no way to ask for another one and
+ * must answer in prose. Total provider calls are therefore never more than
+ * `maxToolCalls + 1`, whatever the model does, and there is no recursion and
+ * no retry anywhere in the path. A model that decides to call `get_services`
+ * forty times in a row costs a bounded number of requests and still produces
+ * an answer.
+ *
+ * WHY THE LOOP IS HERE AND NOT IN THE PROVIDER. A provider that ran the loop
+ * itself would be an unbounded loop by construction, and the bound is the
+ * whole point — see the note in provider.ts.
+ *
+ * WHAT THE CLIENT NEVER SEES. Tool calls and tool results stay inside one
+ * request. The browser holds plain user and assistant text and nothing else,
+ * so a client cannot replay a forged tool result and cannot learn an internal
+ * id it was not given deliberately.
+ * ---------------------------------------------------------------------------
+ */
+
+export interface Limits {
+  maxToolCalls: number;
+  maxOutputTokens: number;
+  maxMessages: number;
+  maxMessageLength: number;
+  /**
+   * How long the WHOLE turn may take, across every provider call in it.
+   *
+   * Bounding each call separately is not enough, and the arithmetic is the
+   * reason: `maxToolCalls + 1` calls at the provider's own 20-second timeout is
+   * a turn that can legitimately run for a minute and a half. The platform
+   * would cut it off first, and a truncated request looks exactly like a broken
+   * assistant — no reply, no fallback, no log line saying why.
+   *
+   * So the turn carries a deadline and each call gets whatever is left of it.
+   * `maxDuration` on the route is then set above this with headroom, and the
+   * customer gets a sentence rather than a hung request.
+   */
+  turnBudgetMs: number;
+}
+
+export const DEFAULT_LIMITS: Limits = {
+  maxToolCalls: 4,
+  maxOutputTokens: 800,
+  maxMessages: 20,
+  maxMessageLength: 1000,
+  turnBudgetMs: 25_000,
+};
+
+function positiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function limitsFrom(env: EnvLike = process.env): Limits {
+  return {
+    maxToolCalls: positiveInt(env.AI_MAX_TOOL_CALLS, DEFAULT_LIMITS.maxToolCalls),
+    maxOutputTokens: positiveInt(env.AI_MAX_OUTPUT_TOKENS, DEFAULT_LIMITS.maxOutputTokens),
+    maxMessages: positiveInt(env.AI_MAX_MESSAGES, DEFAULT_LIMITS.maxMessages),
+    maxMessageLength: positiveInt(env.AI_MAX_MESSAGE_LENGTH, DEFAULT_LIMITS.maxMessageLength),
+    turnBudgetMs: positiveInt(env.AI_TURN_BUDGET_MS, DEFAULT_LIMITS.turnBudgetMs),
+  };
+}
+
+/**
+ * What the customer is told when the assistant cannot answer.
+ *
+ * Never a provider name, never an HTTP status, never "Gemini returned 429" —
+ * spec §35. The customer does not care whose fault it is and cannot act on it.
+ * What they can act on is the booking page, which is working.
+ */
+export const FALLBACK_MESSAGE =
+  "I'm having trouble with the assistant right now. You can still see everything and book on our booking page.";
+
+export const BUSY_MESSAGE =
+  "I'm getting a lot of questions at the moment. You can book straight away on our booking page, or try me again in a few minutes.";
+
+const UNRESOLVED_MESSAGE =
+  "I couldn't get that one straight. Our booking page has the full list of treatments and times.";
+
+export interface OrchestrateRequest {
+  /** User and assistant turns from the client. Nothing else is accepted. */
+  messages: AIMessage[];
+  businessId: string;
+  provider: AIProvider;
+  limits?: Limits;
+  now?: Date;
+  signal?: AbortSignal;
+}
+
+export interface OrchestrateResult {
+  reply: string;
+  attachments: ChatAttachment[];
+  /** True when the reply is a fallback rather than something the model said. */
+  degraded: boolean;
+}
+
+export async function orchestrate(request: OrchestrateRequest): Promise<OrchestrateResult> {
+  const { messages, businessId, provider, signal } = request;
+  const limits = request.limits ?? limitsFrom();
+  const now = request.now ?? new Date();
+
+  // Layer 2 of safety.ts: the blunt attempts are refused here, before a request
+  // is spent on a rate-limited key finding out that the model would also have
+  // refused. Only the newest customer turn is classified — an older one has
+  // already been answered, and re-refusing it would make the assistant
+  // unusable for the rest of the conversation.
+  const latest = [...messages].reverse().find((message) => message.role === 'user');
+  if (latest) {
+    const verdict = classifyMessage(latest.content);
+    if (verdict.blocked) {
+      // The category, never the message. Knowing an attack happened and what
+      // shape it was is operational; keeping what was typed is a log of
+      // customer conversations, which §48 forbids.
+      console.warn('[ai] message refused', { category: verdict.category });
+      return { reply: REFUSAL, attachments: [], degraded: false };
+    }
+  }
+
+  const business = await getBusiness(businessId);
+  if (!business) return degraded(FALLBACK_MESSAGE);
+
+  const systemPrompt = buildSystemPrompt({
+    businessName: business.name,
+    today: todayInZone(business.timezone, now),
+  });
+
+  const context: ToolContext = { businessId, now };
+  const turns: AIMessage[] = [...messages];
+  const attachments: ChatAttachment[] = [];
+
+  // Wall-clock, deliberately not `now`: `now` is domain time and tests inject a
+  // fixed one to reason about availability, which would make a deadline built
+  // from it either already past or hours away.
+  const deadline = Date.now() + limits.turnBudgetMs;
+  const remaining = () => deadline - Date.now();
+
+  for (let executed = 0; executed < limits.maxToolCalls; executed++) {
+    if (remaining() <= 0) return outOfTime(attachments);
+
+    const result = await provider.generateToolCall({
+      systemPrompt,
+      messages: turns,
+      tools: TOOL_DECLARATIONS,
+      maxOutputTokens: limits.maxOutputTokens,
+      timeoutMs: remaining(),
+      signal,
+    });
+
+    if (!result.ok) return providerFailure(result.failure, result.detail, attachments);
+
+    const { text, toolCall } = result.value;
+    if (!toolCall) {
+      return { reply: finalText(text), attachments, degraded: false };
+    }
+
+    turns.push({ role: 'assistant', content: text ?? '', toolCall });
+
+    const outcome = await executeTool(toolCall.name, toolCall.args, context);
+    if (outcome.ok && outcome.client) {
+      // The client projection. Replaces any earlier one of the same kind: a
+      // conversation that checks Friday and then Saturday should leave the
+      // customer looking at Saturday's times, not both days stacked up.
+      const index = attachments.findIndex((existing) => existing.kind === outcome.client!.kind);
+      if (index >= 0) attachments.splice(index, 1);
+      attachments.push(outcome.client);
+    }
+
+    turns.push({
+      role: 'tool',
+      toolName: outcome.tool,
+      // Only the model projection crosses back into the conversation. The
+      // client projection carries ids and never goes near the provider.
+      content: JSON.stringify(outcome.ok ? outcome.data : { error: outcome.error, message: outcome.message }),
+    });
+  }
+
+  // The ceiling. One more turn with NO tools offered, so the model has to
+  // answer with what it already has rather than asking for a fifth thing.
+  if (remaining() <= 0) return outOfTime(attachments);
+
+  const final = await provider.generateResponse({
+    systemPrompt,
+    messages: turns,
+    maxOutputTokens: limits.maxOutputTokens,
+    timeoutMs: remaining(),
+    signal,
+  });
+
+  if (!final.ok) return providerFailure(final.failure, final.detail, attachments);
+  return { reply: finalText(final.value.text), attachments, degraded: false };
+}
+
+function finalText(text: string | null): string {
+  const scrubbed = scrubSecrets((text ?? '').trim());
+  return scrubbed || UNRESOLVED_MESSAGE;
+}
+
+function degraded(reply: string, attachments: ChatAttachment[] = []): OrchestrateResult {
+  return { reply, attachments, degraded: true };
+}
+
+/**
+ * The turn ran out of budget. Answer with a sentence and whatever was already
+ * found, rather than starting a call the platform is about to cut off.
+ */
+function outOfTime(attachments: ChatAttachment[]): OrchestrateResult {
+  console.warn('[ai] turn budget exhausted');
+  return degraded(FALLBACK_MESSAGE, attachments);
+}
+
+/**
+ * Every provider failure becomes the same customer-facing sentence.
+ *
+ * Distinguishing them for the CUSTOMER would be false precision — there is
+ * nothing they can do differently about a timeout than about a rate limit. The
+ * distinction is kept in the log, where somebody can act on it.
+ */
+function providerFailure(
+  failure: AIFailure,
+  detail: string,
+  attachments: ChatAttachment[],
+): OrchestrateResult {
+  console.error('[ai] provider failure', { failure, detail: safeError({ message: detail }).message });
+  return degraded(failure === 'rate_limited' ? BUSY_MESSAGE : FALLBACK_MESSAGE, attachments);
+}
+
+// ---------------------------------------------------------------------------
+// Structured actions from the client
+// ---------------------------------------------------------------------------
+
+export type ClientAction =
+  | { kind: 'service'; serviceId: string }
+  | { kind: 'slot'; serviceId: string; startsAt: string; staffId?: string | null };
+
+/**
+ * Turn a tapped button into a customer turn — after checking it against the
+ * database, not before.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS NOT SIMPLY TRUSTED
+ *
+ * The payload arrives from the browser, so it carries exactly as much authority
+ * as model output: none. Anyone can post this endpoint by hand. If a tapped
+ * slot were turned into "I'll take 15:00 with Sarah" on the client's word
+ * alone, a forged action would put a time that was never offered into the
+ * conversation, and the assistant would repeat it back as though the engine
+ * had produced it.
+ *
+ * So the service is looked up, and the instant is checked against the live
+ * availability engine — the same one that offered it. Booking does not exist
+ * yet, and this is the point at which establishing the pattern is cheap: when
+ * it does, the difference between validating here and trusting here is the
+ * difference between a rejected action and a booking nobody asked for.
+ * ---------------------------------------------------------------------------
+ */
+export async function describeAction(
+  action: ClientAction,
+  context: ToolContext,
+): Promise<string | null> {
+  const business = await getBusiness(context.businessId);
+  if (!business) return null;
+
+  const service = await getService(action.serviceId);
+  if (!service || !service.active || service.business_id !== context.businessId) return null;
+
+  if (action.kind === 'service') {
+    return `I'm interested in the ${service.name}.`;
+  }
+
+  const startsAt = new Date(action.startsAt);
+  if (Number.isNaN(startsAt.getTime())) return null;
+
+  const date = utcToZonedDate(startsAt, business.timezone);
+  const slots = await getAvailableSlots({
+    businessId: context.businessId,
+    serviceId: service.id,
+    date,
+    now: context.now,
+  });
+
+  const match = slots.find((slot) => slot.startsAt.getTime() === startsAt.getTime());
+  const label = formatSlotLabel(startsAt, business.timezone);
+
+  if (!match) {
+    // Honest rather than silent. The slot may simply have gone while the
+    // customer was reading, which is the same race /book handles, and the
+    // assistant should offer alternatives rather than pretend.
+    return `I was looking at ${label} on ${date} for the ${service.name}, but it seems to have gone. What else is there?`;
+  }
+
+  // The therapist is named only if she was resolved to the customer's request.
+  // Naming whoever happened to sort first would tell the customer they had
+  // chosen someone they never chose.
+  if (action.staffId) {
+    const staff = await getActiveStaff(context.businessId);
+    const requested = staff.find((member) => member.id === action.staffId);
+    if (requested && match.staffId === requested.id) {
+      return `I'd like ${label} on ${date} for the ${service.name} with ${requested.name}.`;
+    }
+  }
+
+  return `I'd like ${label} on ${date} for the ${service.name}.`;
+}

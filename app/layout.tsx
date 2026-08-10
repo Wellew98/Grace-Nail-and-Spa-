@@ -4,6 +4,9 @@ import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { LocalBusinessJsonLd } from '@/components/local-business-jsonld';
 import { DemoBanner } from '@/components/demo-banner';
+import { ChatWidget } from '@/components/ai/chat-widget';
+import { limitsFrom } from '@/lib/ai/orchestrator';
+import { providerConfigProblem } from '@/lib/ai/provider';
 import { getActiveServices, getBusiness, getOpeningHours, hasDemoData } from '@/lib/public-data';
 import { SITE } from '@/lib/site';
 import './globals.css';
@@ -87,6 +90,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     hasDemoData(business.id),
   ]);
 
+  /**
+   * The assistant is an enhancement; the booking system is the product.
+   *
+   * Decided here, on the server, so a deployment with no AI key ships no chat
+   * button and no chat JavaScript rather than a button that apologises — and
+   * nothing outside lib/ai, components/ai and the chat route ever reads an AI
+   * environment variable. Removing GEMINI_API_KEY leaves this page with
+   * nothing that could fail.
+   */
+  const assistantAvailable = providerConfigProblem() === null;
+
   return (
     <html lang="en-ZA" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
       <body className="flex min-h-screen flex-col">
@@ -102,6 +116,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           {children}
         </main>
         <SiteFooter business={business} hours={hours} />
+        {assistantAvailable && (
+          <ChatWidget
+            businessName={business.name}
+            maxMessageLength={limitsFrom().maxMessageLength}
+          />
+        )}
         <LocalBusinessJsonLd
           business={business}
           services={services}

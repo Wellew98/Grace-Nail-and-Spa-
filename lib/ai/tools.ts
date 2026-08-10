@@ -9,6 +9,7 @@ import { formatSlotLabel, daysBetween, todayInZone, type IsoDate } from '../time
 import { validateToolCall, type CheckAvailabilityArgs } from './validation';
 import type {
   AIToolDeclaration,
+  AvailabilityAttachment,
   AvailabilityInfo,
   BusinessInfo,
   OpeningHoursDay,
@@ -238,7 +239,7 @@ export async function getStaff(
 // ---------------------------------------------------------------------------
 
 export type AvailabilityOutcome =
-  | { ok: true; data: SampleDataFlag & AvailabilityInfo }
+  | { ok: true; data: SampleDataFlag & AvailabilityInfo; client: AvailabilityAttachment }
   | { ok: false; error: 'not_found' | 'out_of_range'; message: string };
 
 export async function checkAvailability(
@@ -298,21 +299,45 @@ export async function checkAvailability(
   });
 
   const staffNames = new Map(staff.map((member) => [member.id, member.name]));
+  const sample = sampleDataFlag(await hasDemoData(context.businessId));
+
+  // ONE engine call, TWO projections. See the note on ToolResult.
+  //
+  // The model gets a label and a name. The client gets the instant and the
+  // resolved staff id, because it is the client that has to be able to say
+  // "that one" later without anything having to resolve a display name a
+  // second time. `resourceId` is in neither: POST /api/bookings does not accept
+  // one and should not — §7 step 4 re-resolves the room under the advisory
+  // lock, and the room can go between this answer and the customer tapping.
+  const resolved = slots.map((slot) => ({
+    startsAt: slot.startsAt.toISOString(),
+    time: formatSlotLabel(slot.startsAt, business.timezone),
+    staffName: staffNames.get(slot.staffId) ?? '',
+    staffId: slot.staffId,
+  }));
 
   return {
     ok: true,
     data: {
-      ...sampleDataFlag(await hasDemoData(context.businessId)),
+      ...sample,
       date: args.date,
       service: service.name,
       timezone: business.timezone,
-      slots: slots.map((slot) => ({
-        // Labelled in the business timezone, never the server's and never a
-        // browser's — spec §12, and the bug that shipped once in the walk-in
-        // form. The resolved (staff_id, resource_id) pair stays server-side.
-        time: formatSlotLabel(slot.startsAt, business.timezone),
-        with: staffNames.get(slot.staffId) ?? '',
-      })),
+      slots: resolved.map((slot) => ({ time: slot.time, with: slot.staffName })),
+    },
+    client: {
+      kind: 'availability',
+      serviceId: service.id,
+      serviceName: service.name,
+      date: args.date,
+      timezone: business.timezone,
+      // True only when the customer named someone. Otherwise the resolved id is
+      // just whoever sorted first among the free, and pinning it would turn an
+      // indifferent customer into a 409.
+      staffPinned: staffId !== null,
+      sampleData: sample.sample_data,
+      ...(sample.sample_data_notice ? { sampleDataNotice: sample.sample_data_notice } : {}),
+      options: resolved,
     },
   };
 }
@@ -366,14 +391,36 @@ export async function executeTool(
     switch (validated.tool) {
       case 'get_business_info':
         return { ok: true, tool: validated.tool, data: await getBusinessInfo(context) };
-      case 'get_services':
-        return { ok: true, tool: validated.tool, data: await getServices(context) };
+      case 'get_services': {
+        const services = await getServices(context);
+        return {
+          ok: true,
+          tool: validated.tool,
+          data: services,
+          client: {
+            kind: 'services',
+            sampleData: services.sample_data,
+            ...(services.sample_data_notice
+              ? { sampleDataNotice: services.sample_data_notice }
+              : {}),
+            services: services.services.map((service) => ({
+              id: service.id,
+              name: service.name,
+              description: service.description,
+              durationMinutes: service.duration_minutes,
+              duration: service.duration,
+              priceCents: service.price_cents,
+              price: service.price,
+            })),
+          },
+        };
+      }
       case 'get_staff':
         return { ok: true, tool: validated.tool, data: await getStaff(context) };
       case 'check_availability': {
         const outcome = await checkAvailability(context, validated.args as CheckAvailabilityArgs);
         return outcome.ok
-          ? { ok: true, tool: validated.tool, data: outcome.data }
+          ? { ok: true, tool: validated.tool, data: outcome.data, client: outcome.client }
           : { ok: false, tool: validated.tool, error: outcome.error, message: outcome.message };
       }
     }

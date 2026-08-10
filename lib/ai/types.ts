@@ -94,12 +94,24 @@ export interface AIFailureResult {
 
 export type AIResult<T> = { ok: true; value: T } | AIFailureResult;
 
-export type AIRole = 'user' | 'assistant';
+export type AIRole = 'user' | 'assistant' | 'tool';
 
-/** One turn of conversation. Text only; no attachments, no metadata. */
+/**
+ * One turn of conversation.
+ *
+ * `user` and `assistant` turns are the ones the CLIENT holds and sends back —
+ * plain text, nothing else. `assistant` turns carrying a `toolCall` and `tool`
+ * turns carrying a result are built inside a single request by the
+ * orchestrator and are never returned to the browser: a client that could
+ * supply a tool result could supply an invented price.
+ */
 export interface AIMessage {
   role: AIRole;
   content: string;
+  /** Assistant turns only: the call the model made instead of prose. */
+  toolCall?: AIToolCall;
+  /** Tool turns only: which tool this answers. */
+  toolName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,9 +188,78 @@ export type ToolFailure =
   /** The data layer failed. */
   | 'unavailable';
 
+/**
+ * ---------------------------------------------------------------------------
+ * TWO PROJECTIONS, ONE ENGINE CALL.
+ *
+ * `data` is what the MODEL sees: display times and therapist names, no ids.
+ * `client` is what the BROWSER sees alongside the reply: the ISO instant and
+ * the resolved staff id, so a tapped slot carries a stable handle instead of a
+ * name that has to be resolved a second time at the worst possible moment.
+ *
+ * They come off the same call to the availability engine — there is no second
+ * query and no second resolution. The orchestrator sends `data` back into the
+ * conversation and hands `client` to the route; neither ever crosses over.
+ * ---------------------------------------------------------------------------
+ */
 export type ToolResult =
-  | { ok: true; tool: string; data: unknown }
+  | { ok: true; tool: string; data: unknown; client?: ChatAttachment }
   | { ok: false; tool: string; error: ToolFailure; message: string };
+
+/** A treatment, as a card the customer can tap rather than a line of prose. */
+export interface ServiceCard {
+  id: string;
+  name: string;
+  description: string | null;
+  durationMinutes: number;
+  duration: string;
+  priceCents: number;
+  price: string;
+}
+
+export interface ServicesAttachment {
+  kind: 'services';
+  sampleData: boolean;
+  sampleDataNotice?: string;
+  services: ServiceCard[];
+}
+
+export interface AvailabilityOption {
+  /**
+   * The instant, not the label. A client holding only 'HH:MM' has to rebuild an
+   * instant from a wall clock and a timezone, which is the naive-local-time
+   * mistake that already shipped once in the walk-in form (v2 §12).
+   */
+  startsAt: string;
+  /** 'HH:MM' in the business timezone — what the button says. */
+  time: string;
+  staffName: string;
+  /** Resolved server-side at check time. Sent on only when `staffPinned`. */
+  staffId: string;
+}
+
+export interface AvailabilityAttachment {
+  kind: 'availability';
+  serviceId: string;
+  serviceName: string;
+  date: string;
+  timezone: string;
+  /**
+   * Did the customer actually ask for this therapist?
+   *
+   * With no request, the resolved id is simply whoever sorted first among the
+   * free. Pinning that would lock an indifferent customer to one therapist and
+   * produce a 409 where `staff_id: null` would have booked someone else. The
+   * client sends the id on only when this is true — the same "Anyone" rule
+   * `/book` already follows.
+   */
+  staffPinned: boolean;
+  sampleData: boolean;
+  sampleDataNotice?: string;
+  options: AvailabilityOption[];
+}
+
+export type ChatAttachment = ServicesAttachment | AvailabilityAttachment;
 
 /**
  * One day of opening hours, as the site itself derives them: the union of every
