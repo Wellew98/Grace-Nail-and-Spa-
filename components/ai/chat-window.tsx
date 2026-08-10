@@ -52,6 +52,12 @@ export function ChatWindow({
 }) {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: 'assistant', content: GREETING }]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  /**
+   * The last-seen services attachment fingerprint. Used to avoid re-rendering
+   * the treatment cards on every turn — once the customer has seen them, they
+   * should only reappear when a fresh get_services call returns new data.
+   */
+  const lastServicesRef = useRef<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -111,7 +117,16 @@ export function ChatWindow({
           ...current,
           { role: 'assistant', content: data.reply, degraded: data.degraded },
         ]);
-        setAttachments(data.attachments ?? []);
+        // Only show the services card when it's actually new — otherwise the
+        // same card re-renders on every turn, stacking duplicates for the user.
+        const newServices = (data.attachments ?? []).find((a) => a.kind === 'services');
+        const fingerprint = newServices ? JSON.stringify(newServices) : '';
+        if (fingerprint && fingerprint !== lastServicesRef.current) {
+          lastServicesRef.current = fingerprint;
+          setAttachments(data.attachments ?? []);
+        } else if (!newServices) {
+          setAttachments(data.attachments ?? []);
+        }
         // A booking came back: the pending card has done its job and must not
         // stay on screen offering to book the same slot again.
         if ((data.attachments ?? []).some((item) => item.kind === 'booking')) setPending(null);
