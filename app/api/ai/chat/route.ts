@@ -226,8 +226,15 @@ export async function POST(request: Request) {
         (item) => !writeAttachments.some((written) => written.kind === item.kind),
       ),
     ];
+    // When the customer already picked a treatment, don't show the full menu
+    // again — the model sometimes calls get_services on follow-up turns and the
+    // card stacks with availability slots.
+    const pickedService = parsed.data.action?.kind === 'service';
+    const filtered = pickedService
+      ? attachments.filter((a) => a.kind !== 'services')
+      : attachments;
     return NextResponse.json(
-      { ...result, attachments, bookUrl: '/book' },
+      { ...result, attachments: filtered, bookUrl: '/book' },
       { headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error) {
