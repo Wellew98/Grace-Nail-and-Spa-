@@ -25,6 +25,16 @@
 -- list of who visited — and the rows are pruned within days regardless. See
 -- lib/ai/rate-limit.ts for the salt.
 --
+-- IF EVERY COUNTER SUDDENLY READS ZERO, THIS IS WHY. The salt falls back to
+-- SUPABASE_DB_URL when AI_RATE_LIMIT_SALT is unset, so ROTATING THE DATABASE
+-- PASSWORD CHANGES EVERY BUCKET KEY and the old rows become unreachable — every
+-- visitor silently starts a fresh window. Harmless once, and it self-corrects
+-- within a day when the orphans are pruned, but it looks like a broken limiter
+-- if you are debugging it cold. Set AI_RATE_LIMIT_SALT explicitly to decouple
+-- the two. The fallback is deliberate all the same: an unsalted hash of an IPv4
+-- address is no protection at all, and this way a deployment that forgot one
+-- more variable cannot silently degrade to one.
+--
 -- THE ONLY NEW TABLE THIS FEATURE ADDS. It holds no personal data, no
 -- conversations and no bookings.
 -- ---------------------------------------------------------------------------

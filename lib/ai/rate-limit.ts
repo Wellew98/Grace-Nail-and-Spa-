@@ -76,6 +76,12 @@ export function limitsFrom(env: EnvLike = process.env): Limits {
  * The salt falls back to the database URL — already a server-only secret that
  * every deployment has — so this cannot silently degrade to an unsalted hash
  * on a deployment that forgot one more environment variable.
+ *
+ * THE COST OF THAT FALLBACK: rotating the database password changes every
+ * bucket key, so every counter appears to reset to zero at once. Harmless, and
+ * it self-corrects when the orphaned rows are pruned, but it is a surprising
+ * coupling between two unrelated things and it looks like a broken limiter to
+ * anyone debugging it cold. Set AI_RATE_LIMIT_SALT explicitly to decouple them.
  */
 export function bucketFor(ip: string | null, env: EnvLike = process.env): string {
   const salt = env.AI_RATE_LIMIT_SALT ?? env.SUPABASE_DB_URL ?? env.TEST_DATABASE_URL ?? 'grace-nails';

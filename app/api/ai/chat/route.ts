@@ -35,13 +35,21 @@ export const dynamic = 'force-dynamic';
 
 /**
  * A turn is up to `AI_MAX_TOOL_CALLS` provider round trips plus a Postgres
- * availability query, and the provider timeout alone is 20s by default.
- * Measured locally, an availability turn with a stubbed provider is ~90ms and
- * the real cost is entirely the model.
+ * availability query. Measured locally, everything EXCEPT the model is a median
+ * of 27ms; the model is the entire rest and could not be measured here, because
+ * outbound network in the build container reaches Supabase and not Google.
  *
- * Set above the worst realistic case with headroom rather than left at the
- * platform default, which would truncate a working request mid-answer and look
- * exactly like a bug in the assistant.
+ * 60 is comfortably inside the platform ceiling rather than at it: with fluid
+ * compute (on by default) Vercel's current limits are 300s default and 300s
+ * maximum on Hobby, 800s on Pro. The often-quoted "Hobby is capped at 60s" is
+ * the pre-fluid-compute figure. So this is a deliberate cap BELOW the platform
+ * default — a runaway turn dies in a minute instead of five.
+ *
+ * What actually bounds a turn is `AI_TURN_BUDGET_MS` (25s), which the
+ * orchestrator enforces across every provider call. This is the backstop, and
+ * the gap between the two is the headroom. Batch C measures a real turn against
+ * the live provider; if that lands near the budget, the budget moves first and
+ * this is re-checked against it.
  */
 export const maxDuration = 60;
 
