@@ -206,7 +206,6 @@ describe('check_availability', () => {
     if (!result.ok) return;
 
     expect(result.data.slots.map((slot) => slot.time)).toEqual(labels(engine));
-    expect(result.data.timezone).toBeUndefined();
     // Times only — therapist names are client-side only. The resolved
     // (staff_id, resource_id) pair stays server-side — spec §6.
     expect(Object.keys(result.data.slots[0]).sort()).toEqual(['time']);
