@@ -428,14 +428,14 @@ export interface StaffInfo {
 export interface AvailabilitySlot {
   /** 'HH:MM' in the business timezone. Never a browser-local time. */
   time: string;
-  /** Who it would be with. A name, not an id. */
-  with: string;
+  /** Who it would be with. A name, not an id. Present in the client projection, omitted from the model projection. */
+  with?: string;
 }
 
 export interface AvailabilityInfo {
   date: string;
   service: string;
-  timezone: string;
+  timezone?: string;
   slots: AvailabilitySlot[];
 }
 

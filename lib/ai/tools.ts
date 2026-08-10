@@ -278,7 +278,7 @@ export async function getStaff(
 // ---------------------------------------------------------------------------
 
 export type AvailabilityOutcome =
-  | { ok: true; data: SampleDataFlag & AvailabilityInfo; client: AvailabilityAttachment }
+  | { ok: true; data: { date: string; service: string; servicePrice?: string; slots: { time: string }[] }; client: AvailabilityAttachment }
   | { ok: false; error: 'not_found' | 'out_of_range'; message: string };
 
 export async function checkAvailability(
