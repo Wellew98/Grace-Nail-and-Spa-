@@ -250,7 +250,7 @@ export class GeminiProvider implements AIProvider {
 
     const text = collectText(result.value);
     if (!text) {
-      return failure('malformed_response', 'the provider returned no text');
+      return failure('malformed_response', 'the provider returned no text', true);
     }
     return { ok: true, value: { text } };
   }
@@ -266,7 +266,7 @@ export class GeminiProvider implements AIProvider {
     // Neither prose nor a call is not a usable turn — it usually means the
     // response was truncated. Reported rather than passed on as an empty reply.
     if (!toolCall && !text) {
-      return failure('malformed_response', 'the provider returned neither text nor a tool call');
+      return failure('malformed_response', 'the provider returned neither text nor a tool call', true);
     }
 
     return { ok: true, value: { text: text || null, toolCall } };
