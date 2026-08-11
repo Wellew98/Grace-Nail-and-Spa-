@@ -30,6 +30,13 @@ export const BUSINESS_SLUG = process.env.NEXT_PUBLIC_BUSINESS_SLUG ?? 'grace-nai
  * table") and asserted specific hygiene practice; both were removed because
  * neither was ours to assert. If the owner confirms details like those, add
  * them — until then, do not.
+ *
+ * HOUSE STYLE: NO EM DASHES IN ANYTHING A VISITOR READS. Not here, not in a
+ * page, not in a button label, not in an email subject. A comma, a colon or a
+ * full stop, every time. This applies to the copy only; the comments in this
+ * codebase are full of them and may stay that way. The assistant is told the
+ * same rule in lib/ai/system-prompt.ts, since it is the one surface that
+ * writes new sentences at runtime.
  * ---------------------------------------------------------------------------
  */
 export const SITE = {
@@ -67,7 +74,7 @@ export const SITE = {
     // The line says where they came from and nothing about who did the nails:
     // five of the nine carry the studio's brand card, four are unestablished.
     // See lib/photos.ts.
-    note: 'Nail work and the studio itself, straight from our Google listing. The polish range is far bigger than any page — come and see it, or ask us for a shade.',
+    note: 'Nail work and the studio itself, straight from our Google listing. The polish range is far bigger than any page. Come and see it, or ask us for a shade.',
   },
 } as const;
 

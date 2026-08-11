@@ -3,11 +3,10 @@ import { Fraunces, Great_Vibes, IBM_Plex_Mono, Karla } from 'next/font/google';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { LocalBusinessJsonLd } from '@/components/local-business-jsonld';
-import { DemoBanner } from '@/components/demo-banner';
 import { ChatWidget } from '@/components/ai/chat-widget';
 import { limitsFrom } from '@/lib/ai/orchestrator';
 import { providerConfigProblem } from '@/lib/ai/provider';
-import { getActiveServices, getBusiness, getOpeningHours, hasDemoData } from '@/lib/public-data';
+import { getActiveServices, getBusiness, getOpeningHours } from '@/lib/public-data';
 import { SITE } from '@/lib/site';
 import './globals.css';
 
@@ -69,7 +68,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(SITE_URL),
-    title: { default: `${name} — ${SITE.tagline}`, template: `%s — ${name}` },
+    title: { default: `${name} · ${SITE.tagline}`, template: `%s · ${name}` },
     description: SITE.heroSupport,
     openGraph: { title: name, description: SITE.heroSupport, type: 'website', locale: 'en_ZA' },
     robots: { index: true, follow: true },
@@ -95,10 +94,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const [services, hours, showingDemoData] = await Promise.all([
+  const [services, hours] = await Promise.all([
     getActiveServices(business.id),
     getOpeningHours(business.id),
-    hasDemoData(business.id),
   ]);
 
   /**
@@ -124,7 +122,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           Skip to content
         </a>
-        {showingDemoData && <DemoBanner />}
         <SiteHeader businessName={business.name} />
         <main id="main" className="flex-1">
           {children}

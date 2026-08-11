@@ -77,7 +77,7 @@ export function AvailabilityOptions({
         ))}
       </div>
       <p className="text-[0.7rem] text-mauve-400">
-        Tapping a time carries on the conversation — nothing is booked until you finish on the
+        Tapping a time carries on the conversation. Nothing is booked until you finish on the
         booking page.
       </p>
     </div>

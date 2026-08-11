@@ -130,7 +130,7 @@ export async function sendOwnerNotification(appointment: AppointmentDetail): Pro
     'owner notification',
     appointment,
     process.env.OWNER_NOTIFICATION_EMAIL,
-    `New booking — ${appointment.service_name}, ${appointment.staff_name}`,
+    `New booking: ${appointment.service_name}, ${appointment.staff_name}`,
     layout(
       'New booking',
       `${detailRows(appointment)}
@@ -147,7 +147,7 @@ export async function sendCancellationNotice(appointment: AppointmentDetail): Pr
     'cancellation notice',
     appointment,
     process.env.OWNER_NOTIFICATION_EMAIL,
-    `Cancelled — ${appointment.service_name}, ${appointment.staff_name}`,
+    `Cancelled: ${appointment.service_name}, ${appointment.staff_name}`,
     layout('Booking cancelled', detailRows(appointment)),
   );
 }

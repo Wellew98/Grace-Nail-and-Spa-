@@ -260,7 +260,7 @@ export async function deactivateServiceAction(serviceId: string): Promise<Action
     ok: true,
     message:
       count > 0
-        ? `Hidden from the booking page. ${count} upcoming booking${count === 1 ? '' : 's'} use this — they will go ahead.`
+        ? `Hidden from the booking page. ${count} upcoming booking${count === 1 ? '' : 's'} use this. They will go ahead.`
         : 'Hidden from the booking page.',
   };
 }

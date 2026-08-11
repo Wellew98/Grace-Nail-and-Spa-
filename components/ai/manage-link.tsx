@@ -56,7 +56,7 @@ export function ManageLink({ attachment }: { attachment: BookingAttachment }) {
 
           <p className="mt-2 text-[0.7rem] leading-snug text-mauve-400">
             {booking.canChange
-              ? 'Keep this link — it is the only way back to this booking.'
+              ? 'Keep this link. It is the only way back to this booking.'
               : 'It is too close to your appointment to change it online. Please phone or WhatsApp us.'}
           </p>
         </>

@@ -369,7 +369,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
               blocksUntil: addMinutes(startsAt, occupancyMinutes),
             })
           : [],
-        message: 'Sorry — that time was taken while you were booking. Here are the times still open.',
+        message: 'Sorry, that time was taken while you were booking. Here are the times still open.',
       };
     }
 

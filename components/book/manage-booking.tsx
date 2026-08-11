@@ -213,7 +213,7 @@ export function ManageBooking({
             ` ${erasedCancelCount === 1 ? 'Your upcoming booking was' : `Your ${erasedCancelCount} upcoming bookings were`} cancelled, because we would have no way to contact you about ${erasedCancelCount === 1 ? 'it' : 'them'}.`}
         </p>
         <p className="mt-4 text-[0.95rem] leading-relaxed text-mauve-500">
-          This link has stopped working. You are very welcome to book again any time — it will
+          This link has stopped working. You are very welcome to book again any time. It will
           start fresh.
         </p>
         <div className="mt-7">

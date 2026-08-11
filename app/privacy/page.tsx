@@ -57,7 +57,7 @@ export default async function PrivacyPage() {
           <strong className="font-medium text-aubergine-900">{business.name}</strong> is the
           responsible party for your information under the Protection of Personal Information Act.
           The booking system is run on the studio&rsquo;s behalf by whoever operates this site,
-          which makes them an operator — they may only process your details on the
+          which makes them an operator: they may only process your details on the
           studio&rsquo;s instructions, for the purposes below.
         </p>
         <p>Ask the studio anything about your information:</p>
@@ -71,7 +71,7 @@ export default async function PrivacyPage() {
           {business.whatsapp && (
             <li>
               <a
-                href={whatsappLink(business.whatsapp, 'Hi — a question about my details.')}
+                href={whatsappLink(business.whatsapp, 'Hi, a question about my details.')}
                 className="text-lacquer-500 underline underline-offset-4"
               >
                 WhatsApp {formatPhoneForDisplay(business.whatsapp)}
@@ -110,8 +110,8 @@ export default async function PrivacyPage() {
           </li>
         </ul>
         <p>
-          Alongside that we keep the bookings themselves — the treatment, the time, the therapist
-          and the price on the day — because that is the diary. If you tell us something about an
+          Alongside that we keep the bookings themselves (the treatment, the time, the therapist
+          and the price on the day) because that is the diary. If you tell us something about an
           appointment over the phone, the studio may note it against your booking.
         </p>
         <p>We ask for nothing else. There is no account to create and no payment taken online.</p>
@@ -146,7 +146,7 @@ export default async function PrivacyPage() {
       <Section title="Your booking link">
         <p>
           The link in your confirmation is how you move or cancel a booking without phoning. It
-          carries a long random code and nothing else — no name, no number — so the address
+          carries a long random code and nothing else: no name, no number. The address
           itself gives nothing away if it is seen over your shoulder. Anyone with that link can
           see and change that one booking, so treat it like a ticket. Manage pages are also kept
           out of search engines.
@@ -155,7 +155,7 @@ export default async function PrivacyPage() {
 
       <Section title="How long we keep it">
         <p>
-          Past bookings stay on the diary as the studio&rsquo;s record of work done — that is what
+          Past bookings stay on the diary as the studio&rsquo;s record of work done, which is what
           a diary is for. Your name and contact details stay with them until you ask us to remove
           them.
         </p>
@@ -167,7 +167,7 @@ export default async function PrivacyPage() {
           <strong className="font-medium text-aubergine-900">Delete my details</strong>. Your name,
           number and email address are erased immediately, along with any notes kept against you
           or your appointments. The appointments themselves stay on the diary without them, so the
-          studio&rsquo;s record of the day does not develop a hole — but they will no longer be
+          studio&rsquo;s record of the day does not develop a hole, but they will no longer be
           connected to you, and nobody can look them up by your name or number afterwards.
         </p>
         <p>
@@ -184,7 +184,7 @@ export default async function PrivacyPage() {
 
       <Section title="Cookies">
         <p>
-          Browsing the site and booking a treatment set no cookies at all — there is no analytics,
+          Browsing the site and booking a treatment set no cookies at all. There is no analytics,
           no advertising and no tracking on this site, which is why you were not asked to agree to
           any. The only cookie the site ever sets is a sign-in session for the studio&rsquo;s own
           staff on the private diary pages, and it is required for signing in to work.
@@ -193,7 +193,7 @@ export default async function PrivacyPage() {
 
       <Section title="If you are not happy">
         <p>
-          Speak to the studio first — it is two people and a phone, and most things are sorted in
+          Speak to the studio first. It is two people and a phone, and most things are sorted in
           a minute. If that does not resolve it, you have the right to complain to the Information
           Regulator (South Africa), the body that oversees POPIA, at{' '}
           <a

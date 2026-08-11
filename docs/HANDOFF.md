@@ -150,11 +150,21 @@ asserted hygiene practice; both were removed. Do not reintroduce that class of c
 
 - Lives in `supabase/migrations/0004_demo_data.sql`. All rows use the id prefix
   `dddddddd-`.
-- `lib/public-data.ts` → `hasDemoData()` detects that prefix, and `components/demo-banner.tsx`
-  renders on every page while any exist.
-- **The banner is derived from the data, not a flag.** A flag has to be remembered and fails
-  in the wrong direction — forget it and invented prices ship with nothing saying so. This
-  way the banner cannot outlive the data or be left switched off.
+- `lib/public-data.ts` → `hasDemoData()` detects that prefix.
+- **The site-wide banner was removed on the owner's instruction** (11 Aug 2026). It said
+  "Sample menu. These treatments, prices and therapists are placeholders…" across the top of
+  every page, and it was taken off because nobody is visiting the site yet but the owner and
+  the developer, who both already know. `components/demo-banner.tsx` is deleted.
+- **What that costs, so it is not discovered by surprise.** The `dddddddd-` rows are still in
+  the database and the prices in them are the poster's real prices with ESTIMATED durations
+  (see `docs/source-material/README.md`). Nothing on the site now says so. If the URL is given
+  to a real customer before those are confirmed, they will book against a length nobody has
+  checked. Launch-gate item 1 was already the fix for this; it is now the only one.
+- `hasDemoData()` itself stays, and still marks tool results for the assistant, which says so
+  in chat and on its service cards. **That is the last remaining warning on any surface.**
+- **It is derived from the data, not a flag.** A flag has to be remembered and fails in the
+  wrong direction — forget it and invented prices ship with nothing saying so. This way the
+  assistant's warning cannot outlive the data or be left switched off.
 - Remove with `npm run db:demo-clear`. It deletes when nothing references the rows, and
   **deactivates instead** when a real booking already points at one, so the booking keeps
   resolving at the price it was made at (§7.1). Both paths were exercised.

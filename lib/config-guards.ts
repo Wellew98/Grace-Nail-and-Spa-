@@ -207,7 +207,7 @@ export async function setWorkingHours(options: {
       conflicts: orphaned,
       message:
         `${orphaned.length} booking${orphaned.length === 1 ? '' : 's'} would fall outside the new hours. ` +
-        'Keep them as they are, or cancel them — nothing is cancelled automatically.',
+        'Keep them as they are, or cancel them. Nothing is cancelled automatically.',
     };
   }
 

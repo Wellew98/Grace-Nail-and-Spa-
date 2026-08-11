@@ -54,7 +54,7 @@ export default function GlobalError({
           </h1>
 
           <p style={{ margin: '0.75rem 0 0', lineHeight: 1.6, color: '#7a5a72' }}>
-            Something went wrong on our side, not yours. Try again in a moment — any booking you
+            Something went wrong on our side, not yours. Try again in a moment. Any booking you
             already have is safe.
           </p>
 

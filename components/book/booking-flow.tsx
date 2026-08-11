@@ -302,7 +302,7 @@ export function BookingFlow({
         </dl>
 
         <p className="mt-6 text-sm leading-relaxed text-mauve-500">
-          Need to move or cancel it? Use the link below — no need to phone. You can change it up to{' '}
+          Need to move or cancel it? Use the link below, no need to phone. You can change it up to{' '}
           {minNoticeMinutes / 60} hours before your appointment.
         </p>
 
@@ -550,7 +550,7 @@ export function BookingFlow({
                 type="email"
                 autoComplete="email"
                 placeholder="you@example.com"
-                hint="Optional — for an emailed confirmation you can keep."
+                hint="Optional, for an emailed confirmation you can keep."
               />
 
               {error && (
@@ -569,7 +569,7 @@ export function BookingFlow({
               */}
               <p className="text-xs leading-relaxed text-mauve-400">
                 Your name and number go to {businessName}, who use them for this booking and
-                nothing else — no marketing, ever. You can have them erased at any time from the
+                nothing else. No marketing, ever. You can have them erased at any time from the
                 link we send you.{' '}
                 <Link href="/privacy" className="underline underline-offset-4 hover:text-mauve-500">
                   How we handle your details
@@ -582,7 +582,7 @@ export function BookingFlow({
                 disabled={submitting}
                 className="w-full rounded-full bg-lacquer-500 px-6 py-4 text-base font-medium text-blush-50 transition-colors hover:bg-lacquer-600 disabled:opacity-60"
               >
-                {submitting ? 'Confirming…' : `Confirm — ${formatZar(service.priceCents)}`}
+                {submitting ? 'Confirming…' : `Confirm · ${formatZar(service.priceCents)}`}
               </button>
 
               <p className="text-center text-xs text-mauve-400">

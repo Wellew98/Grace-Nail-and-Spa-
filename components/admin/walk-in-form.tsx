@@ -139,7 +139,7 @@ export function WalkInForm({
               <ul className="mt-2 space-y-1 text-xs">
                 {result.clashesWith.map((clash) => (
                   <li key={clash.appointment_id}>
-                    Clashes with {clash.customer_name} — {clash.service_name}, {clash.staff_name}
+                    Clashes with {clash.customer_name}: {clash.service_name}, {clash.staff_name}
                     {clash.reason === 'resource' && clash.resource_name && ` (${clash.resource_name})`}
                   </li>
                 ))}

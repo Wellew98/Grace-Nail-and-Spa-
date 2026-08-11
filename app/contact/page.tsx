@@ -96,7 +96,7 @@ export default async function ContactPage() {
           <div className="mt-8 rounded-2xl bg-blush-100 px-6 py-7">
             <p className="text-sm leading-relaxed text-mauve-600">
               Bookings close {business.min_notice_minutes / 60} hours before the appointment. Inside
-              that window, phone us — if there is a gap we will take you.
+              that window, phone us. If there is a gap we will take you.
             </p>
             <BookButton className="mt-5" />
           </div>

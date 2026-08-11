@@ -140,7 +140,7 @@ export const TOOL_DECLARATIONS: AIToolDeclaration[] = [
     // omission — see ToolContext.manageToken. The model asks "what is the
     // booking this customer is holding"; it cannot ask about any other.
     description:
-      "The appointment this guest is currently holding, if they opened their booking link. Returns the treatment, date, time, therapist and status — never their name, phone number or link. Call it before discussing an existing booking, and do not guess any of these details.",
+      "The appointment this guest is currently holding, if they opened their booking link. Returns the treatment, date, time, therapist and status, never their name, phone number or link. Call it before discussing an existing booking, and do not guess any of these details.",
     parameters: { type: 'object', properties: {}, required: [] },
   },
 ];

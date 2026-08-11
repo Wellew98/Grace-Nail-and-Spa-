@@ -31,7 +31,7 @@ import 'server-only';
  */
 
 export const REFUSAL =
-  "I can't help with that one. I can tell you about our treatments, prices, opening hours or what times are free — what would you like?";
+  "I can't help with that one. I can tell you about our treatments, prices, opening hours or what times are free. What would you like?";
 
 export type InjectionCategory =
   | 'instruction_override'
