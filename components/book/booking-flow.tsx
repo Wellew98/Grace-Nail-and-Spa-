@@ -64,6 +64,39 @@ export function BookingFlow({
   const [serviceId, setServiceId] = useState<string | null>(
     services.some((s) => s.id === preselectedServiceId) ? preselectedServiceId : null,
   );
+
+  /**
+   * Is the treatment list open?
+   *
+   * -------------------------------------------------------------------------
+   * WHY THE LIST COLLAPSES INSTEAD OF STAYING PUT.
+   *
+   * This flow was built for six treatments, where every step fitted on one
+   * screen and leaving the list open cost nothing. The real menu is 43, which
+   * is about three thousand pixels — so a guest who tapped the second
+   * treatment saw nothing happen and had to scroll past forty-one others to
+   * reach "Pick a day". Several reported it as the page being broken, which
+   * is the right reading: nothing visibly responded to the tap.
+   *
+   * Collapsing to a single row puts step 2 immediately under the thumb that
+   * just tapped, and the page goes from ~3000px to under one screen. Reopening
+   * is one tap on "Change".
+   * -------------------------------------------------------------------------
+   */
+  const [listOpen, setListOpen] = useState(
+    !services.some((s) => s.id === preselectedServiceId),
+  );
+  /**
+   * Scroll targets. Each carries `scroll-mt-24` in the markup.
+   *
+   * The site header is `sticky top-0` and 65px tall, so `scrollIntoView` with
+   * `block: 'start'` puts the element's top at y=0 — underneath the header,
+   * which then covers the very heading the guest was sent to read. The scroll
+   * margin reserves room for it. This applied to the slot and details scrolls
+   * before this change too; it was simply less visible when the page was six
+   * treatments long and those scrolls rarely moved far.
+   */
+  const therapistRef = useRef<HTMLDivElement>(null);
   const [staffId, setStaffId] = useState<string>('any');
   const [date, setDate] = useState<string | null>(null);
   const [slot, setSlot] = useState<Slot | null>(null);
@@ -84,6 +117,19 @@ export function BookingFlow({
   const slotsRef = useRef<HTMLDivElement>(null);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId) ?? null, [services, serviceId]);
+
+  /** The menu, grouped under the studio's own poster headings. */
+  const serviceGroups = useMemo(
+    () => [
+      ...services.reduce((map, item) => {
+        const label = item.description?.trim() ?? '';
+        // Only short labels are categories; a real sentence is a description.
+        const key = label.length > 0 && label.length <= 30 ? label : '';
+        return map.set(key, [...(map.get(key) ?? []), item]);
+      }, new Map<string, BookableService[]>()),
+    ],
+    [services],
+  );
 
   /**
    * Name the therapist under each time only when the names actually differ.
@@ -157,6 +203,19 @@ export function BookingFlow({
     setSlot(null);
     void loadSlots();
   }, [loadSlots]);
+
+  function chooseService(nextId: string) {
+    setServiceId(nextId);
+    setStaffId('any');
+    setSlot(null);
+    setListOpen(false);
+    // The list above has just collapsed, so the page is far shorter than it
+    // was and the current scroll position may be past the end of it. Put the
+    // next step where the guest is looking.
+    requestAnimationFrame(() =>
+      therapistRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  }
 
   function chooseSlot(next: Slot) {
     setSlot(next);
@@ -274,19 +333,48 @@ export function BookingFlow({
       </h1>
 
       {/* 1 — treatment */}
-      <Step index="1" title="Choose a treatment">
-        <ul className="space-y-2">
-          {services.map((item) => {
+      <Step index="1" title={service && !listOpen ? 'Your treatment' : 'Choose a treatment'}>
+        {service && !listOpen ? (
+          /* Chosen: one row, and a way back. */
+          <div className="flex items-center gap-4 rounded-xl border border-aubergine-900 bg-blush-100 px-4 py-3.5">
+            <Swatch serviceName={service.name} size="dot" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.98rem] leading-tight text-aubergine-900">
+                {service.name}
+              </span>
+              <span className="tabular mt-0.5 block text-xs text-mauve-400">
+                {formatDuration(service.durationMinutes)} · {formatZar(service.priceCents)}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setListOpen(true)}
+              className="shrink-0 rounded-full border border-aubergine-900/25 px-4 py-2 text-sm text-aubergine-900 transition-colors hover:bg-blush-200"
+            >
+              Change
+            </button>
+          </div>
+        ) : (
+          /* Open: grouped, because 43 treatments in one flat list is a
+             scroll rather than a choice. The headings are the studio's own,
+             carried on `description` — anything without a short category
+             falls into one unheaded group so nothing is ever hidden. */
+          <div className="space-y-6">
+            {serviceGroups.map(([heading, items]) => (
+              <div key={heading || 'all'}>
+                {heading && (
+                  <h3 className="mb-2 font-mono text-[0.65rem] tracking-[0.14em] text-gilt-600 uppercase">
+                    {heading}
+                  </h3>
+                )}
+                <ul className="space-y-2">
+                  {items.map((item) => {
             const selected = item.id === serviceId;
             return (
               <li key={item.id}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setServiceId(item.id);
-                    setStaffId('any');
-                    setSlot(null);
-                  }}
+                  onClick={() => chooseService(item.id)}
                   aria-pressed={selected}
                   className={`flex w-full items-center gap-4 rounded-xl border px-4 py-3.5 text-left transition-colors ${
                     selected
@@ -309,12 +397,17 @@ export function BookingFlow({
                 </button>
               </li>
             );
-          })}
-        </ul>
+                  })}
+                </ul>
+              </div>
+            ))}
+          </div>
+        )}
       </Step>
 
       {/* 2 — therapist */}
       {service && (
+        <div ref={therapistRef} className="scroll-mt-24">
         <Step index="2" title="Anyone, or someone in particular?">
           <div className="flex flex-wrap gap-2">
             <Chip label="Anyone" selected={staffId === 'any'} onClick={() => setStaffId('any')} />
@@ -333,6 +426,7 @@ export function BookingFlow({
             </p>
           )}
         </Step>
+        </div>
       )}
 
       {/* 3 — day */}
@@ -379,7 +473,7 @@ export function BookingFlow({
 
       {/* 4 — time */}
       {service && date && (
-        <div ref={slotsRef}>
+        <div ref={slotsRef} className="scroll-mt-24">
           <Step index="4" title="Pick a time">
             {loadingSlots ? (
               <p className="py-6 text-sm text-mauve-400">Checking what&rsquo;s free…</p>
@@ -427,7 +521,7 @@ export function BookingFlow({
 
       {/* 5 — details */}
       {service && slot && (
-        <div ref={detailsRef}>
+        <div ref={detailsRef} className="scroll-mt-24">
           <Step index="5" title="Your details">
             <form onSubmit={submit} className="space-y-4">
               <Field
