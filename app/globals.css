@@ -10,12 +10,20 @@
 
    Ground is blush rather than the usual spa cream; ink is aubergine rather
    than black. Gilt is used only for hairlines and eyebrows, never for fills.
+
+   The ground was chosen before we had seen the studio's own signage, and the
+   banner outside 11 Amanda Avenue turned out to be built on the same three
+   things: a blush wash, a rose-pink line carrying the opening hours, and near
+   black for the message. So the tokens below stand, and the homepage hero now
+   uses them the way the shopfront does — see app/page.tsx.
 --------------------------------------------------------------------------- */
 
 @theme {
   --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
   --font-sans: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Reserved for the logo mark. Nothing else on the site is set in script. */
+  --font-script: var(--font-great-vibes), 'Snell Roundhand', cursive;
 
   --color-blush-50: #fdf8f7;
   --color-blush-100: #f9edeb;
@@ -107,6 +115,13 @@ body {
 
 .swatch-rise {
   animation: swatch-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The hero photograph has no frame: it fades out across its own left edge into
+   the blush wash, the way the pictures do on the studio's printed banner. */
+.photo-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 55%);
 }
 
 /* Horizontal pickers scroll by swipe; the bar itself is noise on a phone. */

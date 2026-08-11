@@ -4,6 +4,11 @@ Eleven images pulled from the spa's own GBP. Ten are photographs and live in
 `public/photos/`; the eleventh is a price-list poster and lives **here**, not in
 `public/` — see below for why.
 
+A twelfth piece of source material — a photograph of the **banner mounted
+outside the shop** — arrived separately and is not a file in this repository.
+What was taken from it is described under "The shopfront banner" below. It is
+where the logo, the hero's wording and the hero's colours now come from.
+
 **The menu has been entered, provisionally** — `supabase/migrations/0006_poster_menu.sql`
 puts all 43 services in with the poster's real names and prices, deactivating
 the six invented treatments from `0004`. The rows keep the `dddddddd-` prefix so
@@ -16,6 +21,72 @@ The photographs are not referenced by any page yet.
 Everything in §"Before any of this goes on the site" is still open, and two
 pieces of it contradict `docs/HANDOFF.md`. Read it before taking the banner
 down.
+
+---
+
+## The shopfront banner
+
+A photograph of the printed banner on the wall outside 11 Amanda Avenue. It is
+the first sight of the studio's own **branding** — until it arrived, the site
+had a name and no logo, and the design system in `app/globals.css` had been
+built from the treatments rather than from anything the business itself uses.
+
+The photograph is not committed: it is a phone shot taken at an angle, half of
+it is a wall, and every part of it that matters has been transcribed below or
+rebuilt as code. Nothing on the site depends on the file.
+
+### What is on it
+
+| Element | As printed |
+|---|---|
+| Logo | A cream disc inside a double ring. The word `GRACE` in letterspaced serif caps, a script "Grace" written across the top of them, and `NAILS &BEAUTY SPA` on a rule beneath |
+| Message | `SCHEDULE AN APPOINTMENT` — heavy black sans caps, the largest thing on the banner |
+| Hours | `MONDAY - SUNDAY \| 9AM - 6PM` — in rose, on its own line under the message |
+| Contact | `GET IN TOUCH:` in small dark caps, then `063 352…` in heavy black (the rest is obscured in the photograph) |
+| Ground | A blush-pink wash behind a montage of nail, pedicure and facial photographs |
+
+### What was taken from it, and where it went
+
+- **The logo** is redrawn as `components/grace-mark.tsx` and now appears in the
+  site header and at the top of the homepage hero. It is a reconstruction in the
+  site's own faces, not a tracing — read the note at the top of that file before
+  changing it, and **ask the owner for the original artwork**, which would
+  replace the drawing outright.
+- **"Schedule an appointment"** is now the homepage `h1` (`lib/site.ts`),
+  finished in the site's serif with "in under a minute" — the studio's own way
+  of asking for the booking, plus the part a printed banner cannot offer.
+- **The palette** needed nothing. The blush ground, the rose accent and the
+  near-black message on the banner are what `app/globals.css` already had as
+  blush, lacquer and aubergine; the hero now uses them in the banner's own
+  arrangement.
+- **The hours and the phone number** were NOT copied as text. The hero reads
+  both out of the database, like the footer does — see the conflict below.
+
+### It confirms the phone number
+
+The banner's `063 352…` matches `HANDOFF.md` §1 and the row in
+`0003_business.sql`. That is a second, independent sighting of **063 352 5374**,
+against a single sighting of `+27 83-520-4875` on the price poster. The question
+in §1 below stands — the poster's number may well be a real second line — but
+the number the site uses is now the better evidenced of the two.
+
+### ⚠ It disagrees with the profile about the hours
+
+| Source | Hours |
+|---|---|
+| Google Business Profile (already in `seed-real-hours.sql`) | Mon–Sat 9am–8pm, Sun 9am–4pm |
+| This banner | Monday–Sunday, 9am–6pm |
+
+Both are the studio's own statements, and they cannot both be current. **Ask
+which is right, then set it once in Admin → Setup.** The homepage hero, the
+footer, the JSON-LD and the booking engine all read the same `working_hours`
+rows, so answering it in one place fixes every surface at once — and until it is
+answered, the site is at least consistent with itself and with what the diary
+will actually offer.
+
+Note that a wrong answer here is not cosmetic: 8pm in the database with a 6pm
+closing time in real life means the booking engine will sell slots nobody is
+there to work.
 
 ---
 

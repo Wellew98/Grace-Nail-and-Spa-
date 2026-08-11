@@ -34,8 +34,22 @@ export const BUSINESS_SLUG = process.env.NEXT_PUBLIC_BUSINESS_SLUG ?? 'grace-nai
  */
 export const SITE = {
   tagline: 'Nail artistry and spa treatments',
-  /** The promise the whole build is organised around (spec §1). */
-  heroLine: 'Book your treatment in under a minute.',
+  /**
+   * The hero headline is the studio's own shopfront line, finished with ours.
+   *
+   * The banner outside 11 Amanda Avenue says SCHEDULE AN APPOINTMENT in heavy
+   * black caps, with the hours and the phone number under it. That is how this
+   * business already asks for the booking, in its own words, and a customer who
+   * has walked past the shop should recognise the page. `heroPromise` is spec
+   * §1's promise — the part the shopfront cannot offer — and the two are set as
+   * one sentence: "Schedule an appointment in under a minute."
+   */
+  heroLine: 'Schedule an appointment',
+  heroPromise: 'in under a minute.',
+  /** Where the studio is, in the profile's own words. Sits above the headline. */
+  heroPlace: 'Glenanda, Johannesburg',
+  /** The banner's own words for its phone number. */
+  heroContact: 'Get in touch',
   heroSupport:
     'Pick a treatment, pick a time, done. No messaging back and forth, no waiting for someone to reply.',
   about: {

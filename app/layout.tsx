@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Fraunces, IBM_Plex_Mono, Karla } from 'next/font/google';
+import { Fraunces, Great_Vibes, IBM_Plex_Mono, Karla } from 'next/font/google';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { LocalBusinessJsonLd } from '@/components/local-business-jsonld';
@@ -27,6 +27,17 @@ const fraunces = Fraunces({
 });
 
 const karla = Karla({ subsets: ['latin'], variable: '--font-karla', display: 'swap' });
+
+/* Great Vibes exists for exactly one string: the script "Grace" written across
+   the logo mark. The studio's banner sets its name in a formal copperplate
+   script, and a mark drawn in the site's own serif instead would be a different
+   business's logo. Loaded once, used once — see components/grace-mark.tsx. */
+const greatVibes = Great_Vibes({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-great-vibes',
+  display: 'swap',
+});
 
 const plexMono = IBM_Plex_Mono({
   subsets: ['latin'],
@@ -102,7 +113,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const assistantAvailable = providerConfigProblem() === null;
 
   return (
-    <html lang="en-ZA" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
+    <html
+      lang="en-ZA"
+      className={`${fraunces.variable} ${karla.variable} ${plexMono.variable} ${greatVibes.variable}`}
+    >
       <body className="flex min-h-screen flex-col">
         <a
           href="#main"

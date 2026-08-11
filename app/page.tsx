@@ -1,8 +1,10 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { BookButton } from '@/components/book-button';
+import { GraceMark } from '@/components/grace-mark';
 import { Swatch } from '@/components/swatch';
-import { getActiveServices, getBusiness } from '@/lib/public-data';
+import { getActiveServices, getBusiness, getOpeningHours } from '@/lib/public-data';
+import { summariseOpeningHours } from '@/lib/hours';
 import { lacquerFor } from '@/lib/palette';
 import { formatDuration, formatZar } from '@/lib/money';
 import { formatPhoneForDisplay } from '@/lib/phone';
@@ -11,7 +13,12 @@ import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
   const business = (await getBusiness())!;
-  const allServices = await getActiveServices(business.id);
+  const [allServices, hours] = await Promise.all([
+    getActiveServices(business.id),
+    getOpeningHours(business.id),
+  ]);
+
+  const hoursLine = summariseOpeningHours(hours);
 
   /**
    * The homepage shows a SELECTION, not the whole menu.
@@ -31,26 +38,86 @@ export default async function HomePage() {
 
   return (
     <>
-      {/* ---------------- hero ---------------- */}
-      <section className="mx-auto max-w-5xl px-5 pt-14 pb-4 sm:pt-24">
-        <p className="text-xs tracking-[0.22em] text-gilt-600 uppercase">{SITE.tagline}</p>
+      {/* ---------------- hero ----------------
+          Built from the studio's own shopfront banner: the mark, then SCHEDULE
+          AN APPOINTMENT in heavy caps, a rose line carrying the hours, and the
+          phone number under "get in touch". A customer who has walked past
+          11 Amanda Avenue should recognise this page as the same business.
 
-        <h1 className="font-display mt-5 max-w-[13ch] text-[2.75rem] leading-[0.95] font-semibold text-aubergine-900 sm:text-7xl">
-          {SITE.heroLine}
-        </h1>
+          What the banner cannot do is take the booking, so the headline
+          finishes in the site's own serif — "in under a minute" — and the
+          button sits directly beneath it.
 
-        <p className="mt-6 max-w-md text-[1.05rem] leading-relaxed text-mauve-500">
-          {SITE.heroSupport}
-        </p>
+          The blush wash and the photograph bleeding in from the right are the
+          banner's too. The photograph is desktop-only: the whole reason the
+          hero has never carried an image is that one pushes the button below
+          the fold on a phone, and that is still true. -------------------- */}
+      <section className="relative isolate overflow-hidden border-b border-gilt-200/70 bg-gradient-to-b from-blush-200 via-blush-100 to-blush-50">
+        <div
+          aria-hidden="true"
+          className="photo-fade pointer-events-none absolute inset-y-0 right-0 hidden w-[44%] lg:block"
+        >
+          <Image
+            src={STUDIO_PHOTO.src}
+            alt=""
+            fill
+            sizes="44vw"
+            priority
+            className="object-cover object-[60%_center] opacity-60"
+          />
+        </div>
 
-        <div className="mt-9 flex flex-wrap items-center gap-4">
-          <BookButton />
-          <a
-            href={`tel:${business.phone}`}
-            className="text-sm text-mauve-500 underline-offset-4 hover:text-aubergine-900 hover:underline"
-          >
-            or call {formatPhoneForDisplay(business.phone)}
-          </a>
+        <div className="relative mx-auto max-w-5xl px-5 pt-10 pb-14 sm:pt-14 sm:pb-20">
+          <GraceMark
+            title={business.name}
+            className="h-20 w-20 text-aubergine-900 sm:h-28 sm:w-28"
+          />
+
+          <p className="mt-7 text-[0.7rem] tracking-[0.28em] text-gilt-600 uppercase">
+            {SITE.heroPlace}
+          </p>
+
+          {/* The line break is a max-width in ch on the CAPS span, not on the
+              h1: "APPOINTMENT" is wider than any sensible measure at this size,
+              so a limit on the h1 would be overridden by that one word and then
+              inherited by the serif line, which would wrap for no reason. */}
+          <h1 className="mt-3 max-w-xl">
+            <span className="block max-w-[12ch] text-[2.3rem] leading-[0.94] font-extrabold tracking-[-0.015em] text-aubergine-900 uppercase sm:text-[3.75rem]">
+              {SITE.heroLine}
+            </span>
+            <span className="font-display mt-3 block text-2xl leading-tight font-semibold text-lacquer-500 sm:text-4xl">
+              {SITE.heroPromise}
+            </span>
+          </h1>
+
+          {/* The hours, on the rose rule the banner prints them on — but read
+              from working_hours, so they cannot drift from the footer, the
+              JSON-LD or what the booking engine will actually offer. */}
+          {hoursLine && (
+            <p className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.7rem] tracking-[0.12em] text-lacquer-600 uppercase">
+              <span aria-hidden="true" className="h-px w-8 shrink-0 bg-lacquer-400" />
+              <span className="tabular font-mono">{hoursLine}</span>
+            </p>
+          )}
+
+          <p className="mt-6 max-w-md text-[1.05rem] leading-relaxed text-mauve-500">
+            {SITE.heroSupport}
+          </p>
+
+          <div className="mt-9 flex flex-wrap items-center gap-x-7 gap-y-4">
+            <BookButton />
+            <p className="text-sm">
+              <span className="block text-[0.68rem] tracking-[0.2em] text-gilt-600 uppercase">
+                {SITE.heroContact}
+              </span>
+              <a
+                href={`tel:${business.phone}`}
+                className="mt-1 block font-medium text-aubergine-900 underline-offset-4 hover:text-lacquer-500 hover:underline"
+              >
+                {formatPhoneForDisplay(business.phone)}
+              </a>
+            </p>
+          </div>
         </div>
       </section>
 

@@ -312,6 +312,17 @@ clear.** Item 4 is done; the other four are not code and cannot be done from her
    is still to do.
 9. **Owner-in-hand test** (v2 §12.B) — she does four tasks on her own phone, unprompted.
 10. **One real customer** books end to end, cold (v2 §12.C).
+11. **Which closing time is current — 6pm or 8pm?** The banner outside the shop says
+    Monday–Sunday 9am–6pm; the Google Business Profile says 9am–8pm with a short Sunday,
+    and that is what `seed-real-hours.sql` carries. This one is sharper than it looks:
+    whatever is in `working_hours` is what the engine sells, so 8pm in the database
+    against a 6pm door means slots booked with nobody there to work them. One answer,
+    entered once in Admin → Setup, fixes the hero line, the footer, the JSON-LD and the
+    diary together. See `docs/source-material/README.md`.
+12. **The logo artwork.** `components/grace-mark.tsx` draws the mark from a photograph of
+    the shopfront banner — a faithful reconstruction in the site's own faces, not the
+    original. Ask her for the file (any vector: `.svg`, `.ai`, `.pdf`) and replace the
+    innards of that one component; everything on the site imports the mark from there.
 
 9 and 10 are gates, not nice-to-haves. Everything above them is verifiable by code; those
 two are the only evidence the system will actually be used. Nobody has booked a real
@@ -347,16 +358,26 @@ lib/db.ts               pool, transactions, SQLSTATE handling, connection diagno
 lib/health.ts           the checks behind /api/health
 lib/time.ts             timezone conversion at the edges
 lib/site.ts             every word of prose, and the rule for what may be claimed
+lib/hours.ts            the opening hours as one line, for the homepage hero
+components/grace-mark.tsx  the studio's logo, drawn — read its header before editing
 app/admin/              today · week · walk-in · blocks · settings
 app/privacy/            v2 §9 — the POPIA notice. Read its header before editing a word of it
 tests/                  the v2 §12.A acceptance tests, against real Postgres
 ```
 
 Design: the organising device is a **lacquer swatch** — a nail bar's characteristic object is
-its colour range, and there was no photography when it was chosen. (There is some now, in
-`public/photos/`, but nothing uses it yet — the swatch system is still what the site runs
-on, and replacing it is a design decision rather than a consequence of the photos arriving.) Each treatment carries its own colour across
-the whole site. Palette and reasoning are at the top of `app/globals.css`.
+its colour range, and there was no photography when it was chosen. The photographs in
+`public/photos/` now carry `/gallery`, the homepage's "from the studio" strip and the hero's
+background, but they sit around the swatch system rather than replacing it. Each treatment
+carries its own colour across the whole site. Palette and reasoning are at the top of
+`app/globals.css`.
+
+The **homepage hero is the shopfront banner**: the studio's mark, its own
+"SCHEDULE AN APPOINTMENT" in heavy caps, the hours on a rose line and the phone under
+"get in touch". The wording is in `lib/site.ts`, the reasoning is in the comment above the
+hero in `app/page.tsx`, and where each piece came from is in
+`docs/source-material/README.md`. The hours and the phone number are read from the
+database, never written into the copy.
 
 **Run the tests before changing anything in `lib/`.** They are the specification made
 executable, and several of them exist because the obvious implementation was wrong.

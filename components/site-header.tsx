@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { GraceMark } from '@/components/grace-mark';
 import { NAV } from '@/lib/site';
 
 export function SiteHeader({ businessName }: { businessName: string }) {
@@ -12,14 +13,21 @@ export function SiteHeader({ businessName }: { businessName: string }) {
   return (
     <header className="sticky top-0 z-50 border-b border-gilt-200/60 bg-blush-50/90 backdrop-blur-sm">
       <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-3.5">
-        {/* Sized to keep "Grace Nails and Beauty Spa" on one line at 390px —
+        {/* Mark and name, as a lockup. The name stays in real text rather than
+            being folded into the logo: §8 wants it readable and identical to
+            the profile, and a picture of a name is neither.
+
+            Sized to keep "Grace Nails and Beauty Spa" on one line at 390px —
             wrapping it made the sticky header noticeably taller on a phone. */}
         <Link
           href="/"
-          className="font-display text-[0.95rem] leading-tight font-semibold tracking-tight text-aubergine-900 sm:text-lg sm:leading-none"
+          className="flex items-center gap-2 text-aubergine-900 sm:gap-2.5"
           onClick={() => setOpen(false)}
         >
-          {businessName}
+          <GraceMark variant="compact" className="h-7 w-7 shrink-0 sm:h-9 sm:w-9" />
+          <span className="font-display text-[0.82rem] leading-tight font-semibold tracking-tight sm:text-lg sm:leading-none">
+            {businessName}
+          </span>
         </Link>
 
         <nav aria-label="Main" className="ml-auto hidden items-center gap-7 sm:flex">
