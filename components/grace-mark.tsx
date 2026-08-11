@@ -21,6 +21,14 @@
  * It is a faithful reconstruction, not a tracing. When the owner sends the
  * original artwork, replace this file's innards with the SVG she supplies —
  * everything on the site imports the mark from here.
+ *
+ * THE FAVICON IS THE ONE COPY THAT IS NOT IMPORTED FROM HERE. `app/icon.png`,
+ * `app/apple-icon.png` and `app/favicon.ico` are pixels, because a standalone
+ * icon file has no page around it and so no webfont — the script would fall
+ * back to whatever cursive the reader's device has. They are generated from
+ * this same artwork by `scripts/make-icons.mjs`, which renders it inside the
+ * running site where the real fonts are loaded. Change the mark and run that
+ * script, or the tab will keep the old logo.
  * ---------------------------------------------------------------------------
  */
 
