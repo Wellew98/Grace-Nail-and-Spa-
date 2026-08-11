@@ -439,10 +439,35 @@ export async function executeTool(
         return {
           ok: true,
           tool: validated.tool,
-          // Model projection: treatment names and descriptions only. No prices,
-          // durations or sample-data warnings — the UI cards show those.
+          /**
+           * Model projection: name, price and length. NOT the sample-data
+           * warning, which the banner and the cards already carry.
+           *
+           * The price is here because it was once removed, and production
+           * answered "how much is a Hollywood wax?" with *"the prices aren't
+           * showing in what I pulled up. I'm sorry"* — while the card beside it
+           * displayed R180. That is the single most common question a salon
+           * gets, and a model that cannot answer it reads as broken however
+           * good the cards are.
+           *
+           * Removing it was aimed at a real problem: the assistant reciting the
+           * whole menu underneath cards that already showed it. But that is a
+           * cosmetic fault and this is a functional one, and the recital is
+           * better handled where it was always going to be handled — the
+           * system prompt's "give a one-line summary and let the UI do the
+           * rest", which a model holding one price can obey exactly.
+           *
+           * `check_availability` already returns `servicePrice` for the same
+           * reason, so leaving this one stripped was also inconsistent.
+           */
           data: {
-            services: services.services.map((s) => ({ id: s.id, name: s.name, description: s.description })),
+            services: services.services.map((s) => ({
+              id: s.id,
+              name: s.name,
+              description: s.description,
+              price: s.price,
+              duration: s.duration,
+            })),
           },
           client: {
             kind: 'services',

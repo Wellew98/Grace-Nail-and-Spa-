@@ -500,3 +500,29 @@ describe('executeTool', () => {
     expect(result).toMatchObject({ ok: false, error: 'unavailable' });
   });
 });
+
+describe('what the model is told about a treatment', () => {
+  it('includes the price, so a direct price question can be answered', async () => {
+    // Regression. This was once stripped to name-and-description, and
+    // production answered "how much is a Hollywood wax?" with "the prices
+    // aren't showing in what I pulled up. I'm sorry" — beside a card showing
+    // R180. It is the most common question a salon is asked.
+    const result = await executeTool('get_services', {}, context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const data = result.data as { services: { name: string; price?: string; duration?: string }[] };
+    const gel = data.services.find((service) => service.name === 'Gel Manicure');
+    expect(gel?.price).toBe('R250');
+    expect(gel?.duration).toBe('45 min');
+  });
+
+  it('still keeps the sample-data warning out of the model projection', async () => {
+    // That one genuinely is the banner's job, and repeating it in prose was
+    // the thing worth fixing.
+    const result = await executeTool('get_services', {}, context);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(JSON.stringify(result.data)).not.toMatch(/sample|placeholder/i);
+  });
+});
