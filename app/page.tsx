@@ -11,7 +11,23 @@ import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
   const business = (await getBusiness())!;
-  const services = await getActiveServices(business.id);
+  const allServices = await getActiveServices(business.id);
+
+  /**
+   * The homepage shows a SELECTION, not the whole menu.
+   *
+   * The real price list is 43 treatments. Rendered in full this page was 86
+   * booking links long — a wall of waxing prices between the hero and the
+   * photographs, on the one page where the job is to get a thumb onto "Book a
+   * treatment". `/services` is where the full list belongs and it is linked
+   * from both blocks.
+   *
+   * Which ones appear is `sort_order`, which the owner controls in
+   * Admin → Setup. That is deliberate: choosing "featured" treatments in code
+   * would mean she cannot change her own shop window without a deploy.
+   */
+  const featured = allServices.slice(0, 6);
+  const strip = allServices.slice(0, 10);
 
   return (
     <>
@@ -53,7 +69,7 @@ export default async function HomePage() {
             narrow screens rather than centring. */}
         <div className="mx-auto max-w-5xl">
           <ul className="scrollbar-none flex items-start gap-5 overflow-x-auto px-5 pb-2 sm:gap-7">
-            {services.map((service, index) => {
+            {strip.map((service, index) => {
               const lacquer = lacquerFor(service.name);
               return (
                 <li key={service.id} className="w-[7.5rem] shrink-0">
@@ -101,7 +117,7 @@ export default async function HomePage() {
         </div>
 
         <ul>
-          {services.map((service) => (
+          {featured.map((service) => (
             <li key={service.id}>
               <Link
                 href={`/book?service=${service.id}`}
@@ -129,6 +145,13 @@ export default async function HomePage() {
             </li>
           ))}
         </ul>
+
+        <Link
+          href="/services"
+          className="mt-7 inline-block text-sm text-lacquer-500 underline-offset-4 hover:underline"
+        >
+          See all {allServices.length} treatments and prices
+        </Link>
       </section>
 
       {/* ---------------- the studio ----------------
