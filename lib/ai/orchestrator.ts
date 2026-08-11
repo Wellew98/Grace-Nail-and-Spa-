@@ -128,29 +128,54 @@ export interface OrchestrateResult {
   degraded: boolean;
 }
 
-/**
- * Call the provider, retrying once on intermittent failures.
- *
- * Gemini's free tier occasionally returns an empty candidate — a known,
- * intermittent provider bug (github.com/livekit/agents/issues/4066). One retry
- * covers it without multiplying latency under a real outage.
- */
 /** Narrow an AIResult to its failure branch. Needed because TypeScript cannot
  * narrow generic discriminated unions inside a conditional. */
 function isRetryable<T>(result: AIResult<T>): result is AIResult<T> & AIFailureResult {
   return !result.ok && (result as AIFailureResult).retryable;
 }
 
+/**
+ * Call the provider, retrying ONCE on intermittent failures.
+ *
+ * Gemini's free tier occasionally returns a candidate with no parts at all — a
+ * known, intermittent provider bug (github.com/livekit/agents/issues/4066) that
+ * one retry covers.
+ *
+ * ---------------------------------------------------------------------------
+ * TWO THINGS THIS DELIBERATELY WILL NOT RETRY.
+ *
+ * A SPENT BUDGET. `retryable` says a later attempt could plausibly succeed; it
+ * says nothing about whether there is time for one. Without the deadline check
+ * a call that timed out having consumed the whole turn budget was retried with
+ * `remaining()` already negative — and `resolveTimeoutMs` turns any
+ * non-positive value into the full 20-second default, so the "bounded" turn
+ * quietly ran to 45 seconds. The budget has to be re-checked here, exactly as
+ * the loop re-checks it before every other call.
+ *
+ * A RATE LIMIT. The provider has just asked us to slow down; sending the same
+ * request again immediately is the one response guaranteed to make it worse,
+ * and on a metered free tier it spends quota to do so. `rate_limited` stays
+ * `retryable: true` because that is true of a LATER attempt — the customer
+ * gets BUSY_MESSAGE and can try again in a minute. Retry policy belongs here,
+ * not in the provider's description of what happened.
+ * ---------------------------------------------------------------------------
+ */
 async function withRetry<T>(
   fn: () => Promise<AIResult<T>>,
   label: string,
+  remainingMs: () => number,
 ): Promise<AIResult<T>> {
   const result = await fn();
-  if (isRetryable(result)) {
-    console.warn('[ai] retrying after retryable failure', { label, detail: result.detail });
-    return fn();
+  if (!isRetryable(result)) return result;
+
+  if (result.failure === 'rate_limited') return result;
+  if (remainingMs() <= 0) {
+    console.warn('[ai] not retrying, turn budget spent', { label, failure: result.failure });
+    return result;
   }
-  return result;
+
+  console.warn('[ai] retrying after retryable failure', { label, detail: result.detail });
+  return fn();
 }
 
 export async function orchestrate(request: OrchestrateRequest): Promise<OrchestrateResult> {
@@ -207,6 +232,7 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
           signal,
         }),
       `tool-call-${executed}`,
+      remaining,
     );
 
     if (!result.ok) return providerFailure(result.failure, result.detail, attachments);
@@ -252,6 +278,7 @@ export async function orchestrate(request: OrchestrateRequest): Promise<Orchestr
         signal,
       }),
     'final-response',
+    remaining,
   );
 
   if (!final.ok) return providerFailure(final.failure, final.detail, attachments);
