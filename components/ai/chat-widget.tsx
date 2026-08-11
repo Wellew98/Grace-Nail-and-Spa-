@@ -15,9 +15,14 @@ import { ChatWindow } from './chat-window';
  * spec §51: with `GEMINI_API_KEY` removed, there is nothing on the page that
  * could fail, and `/book` is untouched because it never knew this existed.
  *
- * The button sits above the thumb on a phone and out of the way of the footer's
- * own links. `/book` remains the primary path everywhere on the site; this is
- * the second one, not a replacement for it.
+ * The button sits above the thumb on a phone. `/book` remains the primary path
+ * everywhere on the site; this is the second one, not a replacement for it.
+ *
+ * BEING FIXED, IT PARKS ON WHATEVER IS IN THE BOTTOM-RIGHT CORNER at the foot
+ * of the page, and it wins every tap there. That took out the footer's "Staff
+ * login" link at every width until `SiteFooter` started reserving room for it
+ * (see `chatWidgetPresent` there). Anything new that lands in the last row of
+ * a page has the same problem.
  * ---------------------------------------------------------------------------
  */
 export function ChatWidget({

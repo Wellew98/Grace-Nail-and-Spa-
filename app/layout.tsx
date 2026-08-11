@@ -126,7 +126,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <main id="main" className="flex-1">
           {children}
         </main>
-        <SiteFooter business={business} hours={hours} />
+        <SiteFooter business={business} hours={hours} chatWidgetPresent={assistantAvailable} />
         {assistantAvailable && (
           <ChatWidget
             businessName={business.name}
