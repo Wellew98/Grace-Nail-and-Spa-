@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { BookButton } from '@/components/book-button';
 import { Swatch } from '@/components/swatch';
@@ -5,6 +6,7 @@ import { getActiveServices, getBusiness } from '@/lib/public-data';
 import { lacquerFor } from '@/lib/palette';
 import { formatDuration, formatZar } from '@/lib/money';
 import { formatPhoneForDisplay } from '@/lib/phone';
+import { NAIL_PHOTOS, STUDIO_PHOTO } from '@/lib/photos';
 import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
@@ -127,6 +129,82 @@ export default async function HomePage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* ---------------- the studio ----------------
+          The only interior photograph that exists for this project, and the
+          first time a visitor can see the room before walking into it. It sits
+          after the treatments rather than in the hero on purpose: the hero's
+          job is to get someone to /book in one tap, and a large image above it
+          pushes that button below the fold on a phone. */}
+      <section aria-labelledby="studio-heading" className="mx-auto mt-20 max-w-5xl px-5 sm:mt-28">
+        <div className="grid gap-8 sm:grid-cols-2 sm:items-center sm:gap-12">
+          <div className="overflow-hidden rounded-2xl bg-blush-100">
+            <Image
+              src={STUDIO_PHOTO.src}
+              alt={STUDIO_PHOTO.alt}
+              width={STUDIO_PHOTO.width}
+              height={STUDIO_PHOTO.height}
+              sizes="(min-width: 640px) 32rem, 100vw"
+              className="w-full object-cover"
+            />
+          </div>
+
+          <div>
+            <p className="text-xs tracking-[0.22em] text-gilt-600 uppercase">Our space</p>
+            <h2
+              id="studio-heading"
+              className="font-display mt-4 max-w-[15ch] text-3xl leading-tight font-semibold text-aubergine-900 sm:text-4xl"
+            >
+              Two stations, a treatment room, and no rush.
+            </h2>
+            <p className="mt-4 max-w-md text-[0.95rem] leading-relaxed text-mauve-500">
+              We are on Amanda Avenue in Glenanda. Come in for a gel colour on your lunch break, or
+              settle in for an hour on the table.
+            </p>
+            <Link
+              href="/gallery"
+              className="mt-6 inline-block text-sm text-lacquer-500 underline-offset-4 hover:underline"
+            >
+              See the studio and our work
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ---------------- recent work ----------------
+          A scrolling strip rather than a grid: it echoes the swatch strip
+          above it, and on a phone it costs one screen instead of four. */}
+      <section aria-labelledby="work-heading" className="mt-20 sm:mt-28">
+        <div className="mx-auto max-w-5xl px-5">
+          <div className="flex items-baseline justify-between gap-4">
+            <h2 id="work-heading" className="font-display text-2xl font-semibold text-aubergine-900">
+              From the studio
+            </h2>
+            <Link href="/gallery" className="text-sm text-lacquer-500 underline-offset-4 hover:underline">
+              Full gallery
+            </Link>
+          </div>
+        </div>
+
+        <div className="mx-auto mt-6 max-w-5xl">
+          <ul className="scrollbar-none flex gap-3 overflow-x-auto px-5 pb-2 sm:gap-4">
+            {NAIL_PHOTOS.slice(0, 6).map((photo) => (
+              <li key={photo.src} className="w-40 shrink-0 sm:w-52">
+                <div className="overflow-hidden rounded-xl bg-blush-100">
+                  <Image
+                    src={photo.src}
+                    alt={photo.alt}
+                    width={photo.width}
+                    height={photo.height}
+                    sizes="(min-width: 640px) 13rem, 10rem"
+                    className="aspect-[3/4] w-full object-cover"
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </section>
 
       {/* ---------------- closing band ---------------- */}

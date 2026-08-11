@@ -48,10 +48,12 @@ export const SITE = {
     ],
   },
   gallery: {
-    lead: 'A colour for every treatment.',
-    // Deliberately does NOT claim these are the shades on the shelf — they are
-    // this site's way of telling treatments apart, not a stock list.
-    note: 'Each treatment carries its own colour across the site, so you can find what you are after at a glance. The polish range itself is far bigger than any page — come and see it, or ask us for a shade.',
+    lead: 'Our work, and our room.',
+    // The photographs are the studio's own, off its Google Business Profile.
+    // The line says where they came from and nothing about who did the nails:
+    // five of the nine carry the studio's brand card, four are unestablished.
+    // See lib/photos.ts.
+    note: 'Nail work and the studio itself, straight from our Google listing. The polish range is far bigger than any page — come and see it, or ask us for a shade.',
   },
 } as const;
 
