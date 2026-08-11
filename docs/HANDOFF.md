@@ -513,6 +513,8 @@ through the assistant is not built** — there is no `create_booking`, `cancel_b
 lib/ai/provider.ts       the AIProvider seam. Nothing outside lib/ai imports gemini.ts or deepseek.ts
 lib/ai/gemini.ts         GeminiProvider, over REST. One call, one bounded timeout, no retries
 lib/ai/deepseek.ts       DeepSeekProvider, over OpenAI-compatible REST. Same interface, different wire format
+                         Its serialisation is covered by tests/ai/deepseek.test.ts — privacy.test.ts
+                         uses a stub provider, so it cannot see a leak in a provider's own wire format
 lib/ai/tools.ts          the four READ-ONLY tools + three write tools (model cannot reach the writes)
 lib/ai/orchestrator.ts   the bounded loop, and validation of tapped buttons
 lib/ai/safety.ts         injection refusal, output scrubbing, log sanitisation
@@ -643,6 +645,17 @@ The fix was two-pronged:
 1. **Retry on empty response** — `gemini.ts` marks `malformed_response` as
    retryable; the orchestrator's `withRetry()` wrapper retries once before
    falling back. This helps for genuinely intermittent failures.
+
+   **It will not retry two things, and both matter.** Not a `rate_limited`
+   failure: the provider has just asked us to slow down, and re-sending
+   immediately is the one response guaranteed to make it worse — on a metered
+   free tier it spends quota to do so. And not once the turn budget is spent:
+   `retryable` says a later attempt could plausibly succeed, not that there is
+   time for one. Without that check, a call that timed out having consumed the
+   whole budget was retried with `remaining()` already negative, and
+   `resolveTimeoutMs` turns any non-positive value into the full 20-second
+   default — so a "bounded" turn quietly ran to about 45 seconds. Both are
+   pinned by tests in `tests/ai/orchestration.test.ts`.
 2. **DeepSeek provider** — `lib/ai/deepseek.ts` is a full `AIProvider`
    implementation over DeepSeek's OpenAI-compatible API. Cheaper, more
    reliable, no free-tier empty-response bug. Auto-detected from
@@ -698,9 +711,19 @@ The services attachment was returned on every turn where the model called
 **Server-side:** When the incoming action is a `service` pick, strip any
 `services` attachment from the response — the customer already chose one.
 
-**Client-side:** Track the last-seen services fingerprint and only re-render
-when the data is genuinely new. Availability and booking attachments always
-pass through.
+**Client-side:** `withoutIncidentalMenu()` drops the menu when the SAME TURN
+also carried availability, a booking or a conflict — i.e. when the model
+fetched it in passing and the customer asked for something more specific. Menu
+on its own always renders.
+
+**This is deliberately a rule about one turn, not a memory of past turns.** The
+first version fingerprinted the menu and suppressed it whenever it matched the
+last one seen. The menu does not change between turns, so the fingerprint
+always matched and the cards were suppressed for the rest of the conversation:
+"show me the treatments again" rendered nothing. And because the model
+projection carries no prices or durations and the system prompt tells it not to
+list treatments, the assistant could neither show the menu nor say it — both
+ways out closed at once. Do not reintroduce cross-turn state here.
 
 **Files changed:** `app/api/ai/chat/route.ts`, `components/ai/chat-window.tsx`.
 

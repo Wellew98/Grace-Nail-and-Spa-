@@ -38,6 +38,37 @@ interface ChatResponse {
   bookUrl?: string;
 }
 
+/**
+ * Drop the treatment menu when it is INCIDENTAL to a more specific answer.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THIS IS A RULE ABOUT ONE TURN AND NOT A MEMORY OF PAST TURNS.
+ *
+ * The problem being solved is stacking: the model often re-calls `get_services`
+ * on a follow-up turn, and the full menu then renders underneath the times the
+ * customer actually asked for.
+ *
+ * An earlier version fixed that by fingerprinting the menu and suppressing it
+ * whenever it matched the last one seen. The menu does not change between
+ * turns, so the fingerprint always matched — and the cards were suppressed for
+ * the rest of the conversation. "Show me the treatments again" then rendered
+ * nothing, and since the model projection carries no prices or durations and
+ * the system prompt tells it not to list treatments, the assistant could
+ * neither show the menu nor say it. Both ways out were closed at once.
+ *
+ * So the test is what ELSE arrived in the same turn, not what arrived before.
+ * Menu alone means the customer asked for the menu: show it, every time they
+ * ask. Menu next to times or a booking means the model fetched it in passing:
+ * drop it, because the specific answer is the one they wanted.
+ * ---------------------------------------------------------------------------
+ */
+function withoutIncidentalMenu(incoming: ChatAttachment[]): ChatAttachment[] {
+  const hasSomethingMoreSpecific = incoming.some(
+    (item) => item.kind === 'availability' || item.kind === 'booking' || item.kind === 'conflict',
+  );
+  return hasSomethingMoreSpecific ? incoming.filter((item) => item.kind !== 'services') : incoming;
+}
+
 export function ChatWindow({
   businessName,
   maxMessageLength,
@@ -52,12 +83,6 @@ export function ChatWindow({
 }) {
   const [turns, setTurns] = useState<ChatTurn[]>([{ role: 'assistant', content: GREETING }]);
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
-  /**
-   * The last-seen services attachment fingerprint. Used to avoid re-rendering
-   * the treatment cards on every turn — once the customer has seen them, they
-   * should only reappear when a fresh get_services call returns new data.
-   */
-  const lastServicesRef = useRef<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /**
@@ -117,20 +142,7 @@ export function ChatWindow({
           ...current,
           { role: 'assistant', content: data.reply, degraded: data.degraded },
         ]);
-        // Only show the services card when it's actually new. If it hasn't
-        // changed from the last time, drop it so it doesn't stack with
-        // availability slots or crowd the conversation.
-        const incoming = data.attachments ?? [];
-        const newServices = incoming.find((a) => a.kind === 'services');
-        const fingerprint = newServices ? JSON.stringify(newServices) : '';
-        const filtered =
-          fingerprint && fingerprint === lastServicesRef.current
-            ? incoming.filter((a) => a.kind !== 'services')
-            : incoming;
-        if (newServices && fingerprint !== lastServicesRef.current) {
-          lastServicesRef.current = fingerprint;
-        }
-        setAttachments(filtered);
+        setAttachments(withoutIncidentalMenu(data.attachments ?? []));
         // A booking came back: the pending card has done its job and must not
         // stay on screen offering to book the same slot again.
         if ((data.attachments ?? []).some((item) => item.kind === 'booking')) setPending(null);

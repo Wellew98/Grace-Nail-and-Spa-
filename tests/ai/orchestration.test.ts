@@ -585,3 +585,83 @@ describe('the cost limits', () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// Retry policy
+// ---------------------------------------------------------------------------
+
+describe('retrying an intermittent provider failure', () => {
+  /** A provider that fails with `failure` once, then succeeds. */
+  function flaky(failure: AIFailure, retryable: boolean, delayMs = 0) {
+    const seen: (number | undefined)[] = [];
+    let calls = 0;
+    const provider: AIProvider = {
+      name: 'gemini',
+      model: 'flaky',
+      supportsToolCalling: () => true,
+      async generateToolCall(request) {
+        seen.push(request.timeoutMs);
+        if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+        if (calls++ === 0) return { ok: false, failure, detail: 'flaked', retryable };
+        return { ok: true, value: { text: 'Recovered.', toolCall: null } };
+      },
+      async generateResponse(): Promise<AIResult<AITextResponse>> {
+        return { ok: true, value: { text: 'Recovered.' } };
+      },
+    };
+    return { provider, seen, callCount: () => calls };
+  }
+
+  it('retries once and recovers', async () => {
+    // Gemini's empty-candidate bug: intermittent, and one retry covers it.
+    const { provider, callCount } = flaky('malformed_response', true);
+    const result = await orchestrate({
+      ...base,
+      provider,
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+
+    expect(callCount()).toBe(2);
+    expect(result).toMatchObject({ reply: 'Recovered.', degraded: false });
+  });
+
+  it('does not retry a failure the provider called permanent', async () => {
+    const { provider, callCount } = flaky('unauthorised', false);
+    await orchestrate({ ...base, provider, messages: [{ role: 'user', content: 'hello' }] });
+    expect(callCount()).toBe(1);
+  });
+
+  it('does not retry a rate limit', async () => {
+    // The provider has just asked us to slow down. Re-sending immediately is
+    // the one response guaranteed to make it worse, and it spends quota to do
+    // it. `retryable` stays true — a LATER attempt may well work — so this is
+    // policy in the orchestrator, not a lie in the provider.
+    const { provider, callCount } = flaky('rate_limited', true);
+    const result = await orchestrate({
+      ...base,
+      provider,
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+
+    expect(callCount()).toBe(1);
+    expect(result).toMatchObject({ reply: BUSY_MESSAGE, degraded: true });
+  });
+
+  it('does not retry once the turn budget is spent', async () => {
+    // The regression this pins: `remaining()` is already negative by the time
+    // the retry would fire, and resolveTimeoutMs turns any non-positive value
+    // into the full 20s default — so a "bounded" turn quietly ran to 45s.
+    const { provider, seen, callCount } = flaky('timeout', true, 60);
+
+    await orchestrate({
+      ...base,
+      provider,
+      limits: { ...limits, turnBudgetMs: 50 },
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+
+    expect(callCount()).toBe(1);
+    // And nothing was ever handed a non-positive timeout.
+    expect(seen.every((value) => (value ?? 1) > 0)).toBe(true);
+  });
+});
