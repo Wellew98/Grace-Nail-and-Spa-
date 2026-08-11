@@ -59,16 +59,26 @@ list arrived. **Every page currently displays a banner saying so** — see §4.
 To finish: get the real treatment names, lengths and prices, the real therapists, and which
 rooms/chairs exist. Enter them in **Admin → Setup**, then run `npm run db:demo-clear`.
 
-**A real price poster now exists** — see `docs/source-material/README.md`. It has 43
-services with prices, transcribed and checked against the image. It is NOT enough on its
-own, and the gaps are the blocking part rather than the prices:
+**The poster menu is now IN, provisionally** — migration `0006_poster_menu.sql`. The six
+invented treatments above are deactivated; the poster's 43 real services and real prices
+are active in their place, and all 43 were verified bookable against the real availability
+engine (34–43 slots each on a working day).
 
-- **No durations.** Only the three massages carry a length. `duration_minutes` is
-  `not null` and §6 builds the availability grid from it, so all 43 need one from the
-  owner. A guessed duration produces bookings that overlap in real life while looking
-  correct in the diary.
-- **No turnaround, and no room/chair mapping** (`service_resources`).
-- **Still no therapist names.**
+**It still carries the `dddddddd-` prefix, so the sample banner is still up, and that is
+deliberate.** The names and prices are the studio's own; the DURATIONS are estimates,
+because the poster gives a length for the three massages and nothing else. Over-warning is
+the safe direction — a guessed duration produces appointments that overlap in real life
+while looking correct in the diary.
+
+What is still needed before the banner can come down — see
+`docs/source-material/README.md`:
+
+- **Confirm every duration.** All estimated except the three massages.
+- **Confirm turnaround and the room/chair mapping** (`service_resources`) — currently
+  estimated: pedicures get a chair, anything done lying down gets the treatment room.
+- **Still no therapist names.** All 43 are mapped to all three invented therapists,
+  because a service with no staff row returns zero slots forever and would sit on the
+  menu permanently unbookable.
 - **The poster's phone number is +27 83-520-4875**, which is not the 063 352 5374 above.
   Do not swap it in. Ask which is current.
 - **Confirm the poster itself is current** before entering anything.
@@ -158,7 +168,8 @@ Three files, easy to confuse:
 | File | Purpose | Reaches production? |
 |---|---|---|
 | `migrations/0003_business.sql` | Real business row and NAP | **Yes** |
-| `migrations/0004_demo_data.sql` | Placeholder menu | **Yes**, on purpose, with the banner |
+| `migrations/0004_demo_data.sql` | Placeholder menu, therapists, rooms | **Yes**, on purpose, with the banner |
+| `migrations/0006_poster_menu.sql` | The real poster menu, estimated durations | **Yes**, with the banner — deactivates 0004's treatments |
 | `seed.sql` | Spec §10's example data | **No** — tests and local only |
 | `seed-real-hours.sql` | Real week over §10's fixture | **No** — local only |
 | `local/0000_local_bootstrap.sql` | Fakes Supabase's auth roles | **No** — bare Postgres only |

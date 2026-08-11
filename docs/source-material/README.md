@@ -4,9 +4,18 @@ Eleven images pulled from the spa's own GBP. Ten are photographs and live in
 `public/photos/`; the eleventh is a price-list poster and lives **here**, not in
 `public/` — see below for why.
 
-**None of this has been entered into the database.** It is evidence, and two
-pieces of it contradict what is already in `docs/HANDOFF.md`. Read §"Before any
-of this goes on the site" before acting on it.
+**The menu has been entered, provisionally** — `supabase/migrations/0006_poster_menu.sql`
+puts all 43 services in with the poster's real names and prices, deactivating
+the six invented treatments from `0004`. The rows keep the `dddddddd-` prefix so
+the sample-menu banner stays up, because the DURATIONS attached to those real
+prices are estimates. All 43 were checked against the real availability engine
+and return slots.
+
+The photographs are not referenced by any page yet.
+
+Everything in §"Before any of this goes on the site" is still open, and two
+pieces of it contradict `docs/HANDOFF.md`. Read it before taking the banner
+down.
 
 ---
 
@@ -103,14 +112,18 @@ number over the confirmed one** — the address in `0003_business.sql` is
 described as byte-for-byte from the GBP and is what the site, the JSON-LD and
 the confirmation emails already use. Ask the owner which is current.
 
-### 2. There are no durations, and the booking engine cannot work without them
+### 2. Every duration is a guess except the three massages
 
-Only the three massages carry a length. `services.duration_minutes` is
-`not null`, and §6 builds the whole availability grid out of duration plus
-turnaround — so every one of the 43 rows above needs a length from the owner
-before it can become a service. This is not a detail that can be estimated: a
-wrong duration produces bookings that overlap in real life while looking correct
-in the diary.
+Only the massages carry a length on the poster. `services.duration_minutes` is
+`not null` and §6 builds the whole availability grid out of duration plus
+turnaround, so `0006` had to supply one for all 43 to make the menu usable at
+all. **Each of those needs confirming.** A wrong duration does not fail loudly:
+it produces bookings that overlap in real life while looking correct in the
+diary.
+
+The estimates are all in `0006_poster_menu.sql`, rounded to the 15-minute
+booking grid, and are the single most likely thing in this project to be wrong
+right now.
 
 Turnaround per treatment is needed too, and so is which treatments need a room
 or a chair (`service_resources`) — a pedicure needs the chair, a hand polish
