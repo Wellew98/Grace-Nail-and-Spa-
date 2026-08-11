@@ -59,34 +59,37 @@ rebuilt as code. Nothing on the site depends on the file.
   near-black message on the banner are what `app/globals.css` already had as
   blush, lacquer and aubergine; the hero now uses them in the banner's own
   arrangement.
-- **The hours and the phone number** were NOT copied as text. The hero reads
-  both out of the database, like the footer does — see the conflict below.
+- **The hours and the phone number** were NOT taken from it, and are not to be
+  — see the rule below. The hero reads both out of the database, like the
+  footer does.
 
-### It confirms the phone number
+### ⛔ THE BANNER IS NOT A SOURCE FOR HOURS OR THE PHONE NUMBER
 
-The banner's `063 352…` matches `HANDOFF.md` §1 and the row in
-`0003_business.sql`. That is a second, independent sighting of **063 352 5374**,
-against a single sighting of `+27 83-520-4875` on the price poster. The question
-in §1 below stands — the poster's number may well be a real second line — but
-the number the site uses is now the better evidenced of the two.
+Decided, 11 Aug 2026. It is a source for the logo, the wording and the colours,
+and for nothing else.
 
-### ⚠ It disagrees with the profile about the hours
+| Fact | Banner says | What the site uses | From |
+|---|---|---|---|
+| Closing time | Monday–Sunday, 9am–6pm | Mon–Sat 9am–8pm, Sun 9am–4pm | `working_hours`, seeded from the Google Business Profile |
+| Phone | `063 352…` (rest obscured) | 063 352 5374 | The `businesses` row, byte-for-byte off the profile (§8) |
 
-| Source | Hours |
-|---|---|
-| Google Business Profile (already in `seed-real-hours.sql`) | Mon–Sat 9am–8pm, Sun 9am–4pm |
-| This banner | Monday–Sunday, 9am–6pm |
+The two disagree about closing time and cannot both be current. The profile
+wins: it is the listing customers actually find, it is what `seed-real-hours.sql`
+and the NAP rule are already built on, and a banner outside a shop can be years
+old with nobody thinking to take it down.
 
-Both are the studio's own statements, and they cannot both be current. **Ask
-which is right, then set it once in Admin → Setup.** The homepage hero, the
-footer, the JSON-LD and the booking engine all read the same `working_hours`
-rows, so answering it in one place fixes every surface at once — and until it is
-answered, the site is at least consistent with itself and with what the diary
-will actually offer.
+This is not cosmetic. Whatever sits in `working_hours` is what the availability
+engine sells, so a 6pm figure entered from the banner against an 8pm working day
+would quietly stop selling the studio's two busiest hours — and the reverse
+would sell slots with nobody there to work them. If the owner ever confirms that
+6pm is the real closing time, that is a change to `working_hours` through
+Admin → Setup, made because **she** said so — not because the banner did.
 
-Note that a wrong answer here is not cosmetic: 8pm in the database with a 6pm
-closing time in real life means the booking engine will sell slots nobody is
-there to work.
+The banner's phone number needs no decision: as far as it is legible it is the
+number the site already uses. It is worth one note that this is now a second,
+independent sighting of 063 352 5374 against a single sighting of
+`+27 83-520-4875` on the price poster, which is useful when asking about §1
+below — but nothing was copied across, and nothing should be.
 
 ---
 

@@ -312,13 +312,15 @@ clear.** Item 4 is done; the other four are not code and cannot be done from her
    is still to do.
 9. **Owner-in-hand test** (v2 §12.B) — she does four tasks on her own phone, unprompted.
 10. **One real customer** books end to end, cold (v2 §12.C).
-11. **Which closing time is current — 6pm or 8pm?** The banner outside the shop says
-    Monday–Sunday 9am–6pm; the Google Business Profile says 9am–8pm with a short Sunday,
-    and that is what `seed-real-hours.sql` carries. This one is sharper than it looks:
-    whatever is in `working_hours` is what the engine sells, so 8pm in the database
-    against a 6pm door means slots booked with nobody there to work them. One answer,
-    entered once in Admin → Setup, fixes the hero line, the footer, the JSON-LD and the
-    diary together. See `docs/source-material/README.md`.
+11. **Ask the owner to confirm her hours in her own words.** The banner outside the shop
+    says Monday–Sunday 9am–6pm; the Google Business Profile says 9am–8pm with a short
+    Sunday, and the profile is what `seed-real-hours.sql` carries and what the site uses.
+    **That is settled — the banner is not a source for hours, and neither is it for the
+    phone number** (`docs/source-material/README.md`). What is still open is the same
+    question `seed-real-hours.sql` already flags in its header: Sunday and Monday were
+    read off Google over a public-holiday weekend and may be holiday-adjusted. Whatever
+    she says goes into `working_hours` once, through Admin → Setup, and the hero line,
+    the footer, the JSON-LD and the diary all follow.
 12. **The logo artwork.** `components/grace-mark.tsx` draws the mark from a photograph of
     the shopfront banner — a faithful reconstruction in the site's own faces, not the
     original. Ask her for the file (any vector: `.svg`, `.ai`, `.pdf`) and replace the

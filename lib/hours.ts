@@ -7,11 +7,12 @@
  * way of the booking button.
  *
  * It is COMPUTED FROM THE SAME DATA the footer and the JSON-LD read, never
- * written out as copy. The hours on the banner (Monday–Sunday, 9am–6pm) already
- * disagree with the ones on the Google Business Profile (9am–8pm, and 9am–4pm
- * on Sunday) — see docs/source-material/README.md. Whichever turns out to be
- * current, the answer belongs in `working_hours` once, and every surface then
- * says the same thing.
+ * written out as copy — and specifically never from the studio's printed
+ * banner, which says 9am–6pm where the Google Business Profile says 9am–8pm.
+ * The profile is the source of record for hours and for the phone number
+ * (docs/source-material/README.md); a shopfront banner can be years old. What
+ * is in `working_hours` is also what the availability engine will sell, so this
+ * line cannot say one thing while the diary offers another.
  */
 
 import { DAY_NAMES, DAY_SHORT } from './site';
