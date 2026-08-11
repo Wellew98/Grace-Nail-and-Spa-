@@ -679,6 +679,14 @@ export type ForgetResult =
  *  3. Every manage token of hers is rotated, which kills the links already
  *     sitting in her inbox. Without this the record stays reachable by anyone
  *     holding an old link, and "erased" would not be true.
+ *  4. Any chat transcript that produced a booking of hers is DELETED outright,
+ *     not anonymised. The reasoning in (1) does not apply to it: the studio has
+ *     no record-of-work interest in a conversation, and a transcript is exactly
+ *     the free text point (2) is about — it is where someone types "I'm the one
+ *     with the sensitive skin, my sister booked last week". Anonymising it
+ *     would leave every one of those words behind attached to nobody, which is
+ *     not erasure. Conversations that never booked have no customer to link to
+ *     and are unreachable here; they age out on their own within 30 days.
  *
  * Idempotent: running it twice is harmless and reports `alreadyErased`.
  */
@@ -750,6 +758,11 @@ export async function forgetCustomer(options: {
         where id = $1`,
       [customerId, ERASED_NAME, `${ERASED_PHONE_PREFIX}${customerId}`],
     );
+
+    // Chat transcripts of hers, gone. In the SAME transaction as the wipe, so
+    // there is no window in which the customers row is empty and the
+    // conversation that names her is still readable in Admin.
+    await client.query('delete from ai_conversations where customer_id = $1', [customerId]);
 
     // Audit that it happened, against every appointment it touched. The event
     // records the act, deliberately not the person — a log of who asked to be

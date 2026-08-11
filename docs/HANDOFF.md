@@ -797,3 +797,97 @@ ways out closed at once. Do not reintroduce cross-turn state here.
 Added rules for plain-text formatting (no markdown), but these are insurance —
 the structural split is what actually prevents the model from repeating UI data.
 `lib/ai/system-prompt.ts`.
+
+## 14. Conversation transcripts, and resuming a chat (11 Aug 2026)
+
+**This reverses a decision, and the reversal is the important part of the
+entry.** Until now the assistant stored nothing anywhere: the conversation
+lived in React state, and `components/ai/chat-window.tsx` said in its header
+that "closing the tab is the retention policy". That was right while nobody had
+a use for a transcript. The owner now has one — she wants to see what people
+ask, which treatments they ask for that are not on the menu, and where a
+conversation stopped short of a booking. None of that is answerable without
+keeping the words.
+
+### The shape
+
+```
+supabase/migrations/0007_ai_conversations.sql   ai_conversations + ai_messages
+lib/ai/transcript.ts                            record, prune, read. 30-day retention
+app/admin/chats/page.tsx                        the owner's screen. No JS: <details>
+components/ai/chat-session.ts                   sessionStorage resume, browser side
+```
+
+The chat route records **after** it has replied, and only the customer's own
+last message plus the assistant's reply. Not the synthetic turns it pushes into
+`messages` to tell the model what a write did — `[The booking was written to
+the database…]` is machinery, not something anybody said.
+
+### What did NOT change, and must not
+
+**Name, phone and the manage token still travel in the envelope, never in
+`messages`.** That is what keeps them out of the transcript, and it is
+structural rather than a redaction rule: there is no code path that could put
+them there. `tests/ai/transcript.test.ts` books through the REAL route with a
+real phone number and greps the stored rows for it, alongside the existing
+`tests/ai/privacy.test.ts` which greps what the provider was handed.
+
+### ⚠ `after()` throws outside a request scope, and that throw is catchable
+
+The recording is deferred with `after()`. Registering it **inside** the route's
+`try` meant that in any context without a Next request scope, `after` itself
+threw, the route's own catch swallowed it, and the customer got the fallback
+message — after the model had been paid for and a booking possibly written. The
+registration is now wrapped, and falls back to running the work inline. Do not
+move it back inside the try.
+
+### Erasure reaches it, and that is why `customer_id` exists
+
+A conversation that ends in a booking is linked to that customer, and
+`forgetCustomer` deletes it **in the same transaction** as the wipe of the
+`customers` row — not in a helper afterwards, which would leave a window where
+the person is erased and the conversation naming them is still readable in
+Admin. Conversations that never booked have nobody to link to; they age out on
+their own within 30 days.
+
+### The retention window is enforced by a 2% sample on the hot path
+
+There is no cron in this project. `pruneOccasionally()` deletes past-window
+conversations on roughly one turn in fifty, exactly as the rate limiter prunes
+its buckets. **If that call stops happening, the privacy notice quietly becomes
+untrue** — `app/privacy/page.tsx` states 30 days, and `AI_TRANSCRIPT_RETENTION_DAYS`
+changes it. Changing one means changing the other.
+
+### Resuming: sessionStorage, deliberately not localStorage
+
+The panel unmounts when closed, and a phone browser reloads a backgrounded tab
+whenever it likes; either used to lose the conversation. sessionStorage fixes
+exactly that and dies with the tab. localStorage would survive more, which is
+the reason against it: phones get handed to other people, and a wax appointment
+reappearing for the next person to open the site is a worse failure than losing
+a conversation.
+
+**The subtle one:** `ChatWindow` slices `turns[0]` off before posting, because
+the greeting is ours and not something the customer said. The save cap
+therefore trims from the MIDDLE and pins the greeting — trimming from the front
+would promote a real message into slot 0 and silently drop it from every
+subsequent request. Pinned in `tests/ai/chat-session.test.ts`.
+
+The name and phone typed into the confirmation card are **not** saved.
+`pending` is the slot, not the person.
+
+### Fixed alongside: `scripts/apply-migrations.mjs` had drifted
+
+Its `MIGRATIONS` array was hand-written and still ended at `0004`, so
+`npm run db:migrate` had been producing databases with no `ai_rate_limit`
+(0005) and no real menu (0006) since those landed — failing later, inside the
+feature, on a developer's machine only. It now reads the directory, which is
+what Supabase's GitHub integration does on merge.
+
+**Files changed:** `supabase/migrations/0007_ai_conversations.sql`,
+`lib/ai/transcript.ts`, `lib/ai/orchestrator.ts`, `lib/booking.ts`,
+`app/api/ai/chat/route.ts`, `app/admin/chats/page.tsx`,
+`components/admin/admin-nav.tsx`, `components/ai/chat-session.ts`,
+`components/ai/chat-window.tsx`, `app/privacy/page.tsx`, `.env.example`,
+`scripts/apply-migrations.mjs`, `tests/helpers/global-setup.ts`,
+`tests/ai/transcript.test.ts`, `tests/ai/chat-session.test.ts`.

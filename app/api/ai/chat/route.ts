@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import {
   BUSY_MESSAGE,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/ai/orchestrator';
 import { getProvider } from '@/lib/ai/provider';
 import { clientIp, consume } from '@/lib/ai/rate-limit';
+import { pruneOccasionally, recordTurns } from '@/lib/ai/transcript';
 import type { ToolContext } from '@/lib/ai/tools';
 import { getBusiness } from '@/lib/public-data';
 import type { AIMessage, ChatAttachment } from '@/lib/ai/types';
@@ -39,7 +40,14 @@ import type { AIMessage, ChatAttachment } from '@/lib/ai/types';
  *
  * ORDER MATTERS. Rate limiting happens before the conversation is even parsed,
  * so a visitor sending a megabyte of nonsense is refused on the cheapest
- * possible path rather than after validating it.
+ * possible path rather than after validating it. It is also why a REFUSED TURN
+ * IS NEVER RECORDED: the transcript write sits past every early return, so
+ * abuse costs a rate-limit upsert and not a transcript.
+ *
+ * THE CONVERSATION IS KEPT for thirty days, so the owner can see what people
+ * ask — see lib/ai/transcript.ts and migration 0007. That store holds the two
+ * sides of the conversation and nothing else; the envelope rule above is what
+ * keeps the phone number out of it, structurally rather than by redaction.
  * ---------------------------------------------------------------------------
  */
 
@@ -124,6 +132,15 @@ const bodySchema = z.strictObject({
    * third party's logs. `ToolContext` carries it to the tools that need it.
    */
   manageToken: z.string().min(10).max(200).optional(),
+  /**
+   * Which conversation this turn belongs to, minted by the browser once per
+   * chat window.
+   *
+   * Optional on purpose: a client that does not send one is simply not
+   * recorded, so a cached older bundle keeps working and the assistant never
+   * depends on the transcript store being reachable.
+   */
+  conversationId: z.uuid().optional(),
 });
 
 /** Never a stack, never a provider string, never an id. */
@@ -180,6 +197,12 @@ export async function POST(request: Request) {
   // narrates it: the customer's booking card has to appear whatever the model
   // then says, and must not depend on it saying anything sensible.
   const writeAttachments: ChatAttachment[] = [];
+  /**
+   * The appointment a write on this turn touched, carried to the transcript so
+   * a booked conversation can be deleted along with the customer's details.
+   * Never added to `messages` — the model's view of the write is `outcome.turn`.
+   */
+  let writeAppointmentId: string | null = null;
 
   if (parsed.data.action) {
     const action = parsed.data.action as ClientAction;
@@ -196,6 +219,7 @@ export async function POST(request: Request) {
       }
       messages.push({ role: 'user', content: outcome.turn });
       if (outcome.attachment) writeAttachments.push(outcome.attachment);
+      writeAppointmentId = outcome.appointmentId ?? null;
     } else {
       // A browse tap becomes a customer turn only after the database agrees it
       // was a real offer. A rejected action falls through to the conversation
@@ -233,6 +257,55 @@ export async function POST(request: Request) {
     const filtered = pickedService
       ? attachments.filter((a) => a.kind !== 'services')
       : attachments;
+
+    /**
+     * Record the turn — AFTER the response, and never able to delay or fail it.
+     *
+     * WHAT IS RECORDED IS WHAT THE TWO OF THEM SAID, and nothing else. The
+     * customer's own last message and the assistant's reply. Not the synthetic
+     * turns pushed into `messages` above: `[The booking was written to the
+     * database...]` is an instruction to the model, not a thing anybody said,
+     * and it would make a transcript unreadable while telling the owner
+     * nothing the `booked` flag does not.
+     *
+     * Only the NEW pair is written. The browser re-sends the whole history on
+     * every turn because the model needs it; storing it again each time would
+     * rewrite the transcript on every message.
+     */
+    const record = async () => {
+      const spoken = parsed.data.messages[parsed.data.messages.length - 1];
+      await recordTurns({
+        conversationId: parsed.data.conversationId,
+        businessId: business.id,
+        appointmentId: writeAppointmentId,
+        booked: filtered.some((item) => item.kind === 'booking' && item.justBooked),
+        turns: [
+          ...(spoken?.role === 'user' ? [{ role: 'user' as const, content: spoken.content }] : []),
+          { role: 'assistant' as const, content: result.reply },
+        ],
+      });
+      await pruneOccasionally();
+    };
+
+    /**
+     * `after()` ITSELF THROWS when there is no request scope around it, and
+     * that throw would land in the catch below — turning a turn that worked
+     * into the fallback message, after the model had already been paid for and
+     * a booking possibly written. The rule this module lives by is that
+     * recording never costs a customer an answer, and an unguarded `after` is
+     * precisely the thing that would break it.
+     *
+     * Outside a request scope there is also nothing to defer to, so the work
+     * runs inline. That path is the test harness today; awaiting it there is
+     * what makes the assertions deterministic, and it costs a live request
+     * nothing because a live request never takes it.
+     */
+    try {
+      after(record);
+    } catch {
+      await record();
+    }
+
     return NextResponse.json(
       { ...result, attachments: filtered, bookUrl: '/book' },
       { headers: { 'Cache-Control': 'no-store' } },

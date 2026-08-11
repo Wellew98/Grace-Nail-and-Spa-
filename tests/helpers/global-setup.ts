@@ -37,6 +37,12 @@ export default async function setup() {
   // 0005 IS applied: it is schema, and the chat route's rate limiter counts
   // into it on every request.
   await db.query(sql('supabase/migrations/0005_ai_rate_limit.sql'));
+  // 0006 is SKIPPED for the same reason as 0004 — it is the real menu, and the
+  // §9 assertions are pinned to §10's fixture.
+  //
+  // 0007 IS applied: it is schema, and the chat route records a transcript into
+  // it on every turn.
+  await db.query(sql('supabase/migrations/0007_ai_conversations.sql'));
   await db.query(sql('supabase/seed.sql'));
   await db.end();
 }

@@ -26,6 +26,12 @@ export const metadata: Metadata = {
  *   the login cookie      proxy.ts — `matcher` is /admin only
  *   the manage link       lib/booking.ts generateManageToken — 32 random bytes
  *   deletion              lib/booking.ts forgetCustomer — anonymise, never delete
+ *   chat transcripts      0007_ai_conversations.sql, lib/ai/transcript.ts
+ *   the 30 days           lib/ai/transcript.ts DEFAULT_RETENTION_DAYS
+ *   what the AI is sent   app/api/ai/chat/route.ts — name and phone are in the
+ *                         envelope, never in `messages`
+ *   the chat on your      components/ai/chat-session.ts — sessionStorage, and
+ *   own device            it is not a cookie
  *
  * Do NOT add a claim here about how the business handles data offline — its
  * paper diary, its staff, its retention habits. None of that is ours to
@@ -114,6 +120,10 @@ export default async function PrivacyPage() {
           and the price on the day) because that is the diary. If you tell us something about an
           appointment over the phone, the studio may note it against your booking.
         </p>
+        <p>
+          If you use the chat button on the site, we also keep what you typed and what the
+          assistant replied. There is a section on that below.
+        </p>
         <p>We ask for nothing else. There is no account to create and no payment taken online.</p>
       </Section>
 
@@ -153,12 +163,48 @@ export default async function PrivacyPage() {
         </p>
       </Section>
 
+      <Section title="The chat button">
+        <p>
+          The chat on this site is answered by an AI assistant, not by a person. It can tell you
+          about treatments and times, and it can make a booking for you.
+        </p>
+        <p>
+          <strong className="font-medium text-aubergine-900">
+            We keep what you typed and what it replied for 30 days, and then it is deleted
+            automatically.
+          </strong>{' '}
+          The studio reads these to see what people are asking for. Nothing else is stored with
+          them: no name, no number, no record of who was at the keyboard. If the conversation ends
+          in a booking, it is linked to that booking so that deleting your details deletes the
+          conversation too.
+        </p>
+        <p>
+          If you book through the chat, the name and number you type into the confirmation card
+          are sent straight to the booking system.{' '}
+          <strong className="font-medium text-aubergine-900">
+            They are never part of the conversation, so they are never sent to the AI provider and
+            never appear in what we keep.
+          </strong>{' '}
+          The messages themselves are sent to that provider in order to be answered, and to nobody
+          else.
+        </p>
+        <p>
+          Anything you type into the chat yourself is kept as you typed it, so please do not type
+          anything into it you would not want kept for a month. You never have to use it: the{' '}
+          <Link href="/book" className="text-lacquer-500 underline underline-offset-4">
+            booking page
+          </Link>{' '}
+          does everything the chat does, and asks only for a name and a number.
+        </p>
+      </Section>
+
       <Section title="How long we keep it">
         <p>
           Past bookings stay on the diary as the studio&rsquo;s record of work done, which is what
           a diary is for. Your name and contact details stay with them until you ask us to remove
           them.
         </p>
+        <p>Chat conversations are the exception: those are deleted after 30 days, every time.</p>
       </Section>
 
       <Section title="Having your details removed">
@@ -168,7 +214,8 @@ export default async function PrivacyPage() {
           number and email address are erased immediately, along with any notes kept against you
           or your appointments. The appointments themselves stay on the diary without them, so the
           studio&rsquo;s record of the day does not develop a hole, but they will no longer be
-          connected to you, and nobody can look them up by your name or number afterwards.
+          connected to you, and nobody can look them up by your name or number afterwards. Any
+          chat conversation that led to one of your bookings is deleted outright at the same time.
         </p>
         <p>
           Your booking link stops working at that point, and it cannot be undone. Any booking
@@ -188,6 +235,15 @@ export default async function PrivacyPage() {
           no advertising and no tracking on this site, which is why you were not asked to agree to
           any. The only cookie the site ever sets is a sign-in session for the studio&rsquo;s own
           staff on the private diary pages, and it is required for signing in to work.
+        </p>
+        <p>
+          One thing that is not a cookie but is worth saying plainly: if you use the chat, your
+          browser keeps that conversation on your own device so that closing the panel or
+          reloading the page does not lose it. It is not sent anywhere by being there, it is not
+          used to recognise you, and{' '}
+          <strong className="font-medium text-aubergine-900">
+            your browser discards it when you close the tab.
+          </strong>
         </p>
       </Section>
 

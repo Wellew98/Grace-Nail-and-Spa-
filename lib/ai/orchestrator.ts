@@ -369,6 +369,15 @@ export interface WriteOutcomeForClient {
   /** The turn the assistant is asked to narrate. Never invented by the model. */
   turn: string;
   attachment: ChatAttachment | null;
+  /**
+   * The appointment this write touched, when it succeeded.
+   *
+   * Exists so the route can attach the transcript to the customer behind it —
+   * which is what puts a stored conversation inside the reach of §9.4 "delete
+   * my details". It is NOT part of what the model sees and must not become so:
+   * `turn` is the model's whole view of what happened here.
+   */
+  appointmentId?: string;
 }
 
 /**
@@ -414,6 +423,7 @@ export async function performWrite(
       return {
         turn: `[The booking was written to the database and confirmed. ${describe(outcome.data)} Tell the guest it is booked, and that their confirmation and booking link are on the way.]`,
         attachment: outcome.client,
+        appointmentId: outcome.appointmentId,
       };
     }
 
@@ -429,7 +439,7 @@ export async function performWrite(
   if (action.kind === 'confirm_cancel') {
     const outcome = await cancelBookingTool(context);
     return outcome.ok
-      ? { turn: '[The booking is now cancelled in the database. Confirm that to the guest.]', attachment: outcome.client }
+      ? { turn: '[The booking is now cancelled in the database. Confirm that to the guest.]', attachment: outcome.client, appointmentId: outcome.appointmentId }
       : { turn: `[The cancellation FAILED and the booking still stands. Reason: ${outcome.message} Tell the guest plainly.]`, attachment: null };
   }
 
@@ -447,6 +457,7 @@ export async function performWrite(
       return {
         turn: `[The booking was moved in the database. ${describe(outcome.data)} Confirm the new time to the guest and tell them their existing booking link still works.]`,
         attachment: outcome.client,
+        appointmentId: outcome.appointmentId,
       };
     }
 
