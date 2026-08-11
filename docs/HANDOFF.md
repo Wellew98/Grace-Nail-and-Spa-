@@ -59,6 +59,20 @@ list arrived. **Every page currently displays a banner saying so** — see §4.
 To finish: get the real treatment names, lengths and prices, the real therapists, and which
 rooms/chairs exist. Enter them in **Admin → Setup**, then run `npm run db:demo-clear`.
 
+**A real price poster now exists** — see `docs/source-material/README.md`. It has 43
+services with prices, transcribed and checked against the image. It is NOT enough on its
+own, and the gaps are the blocking part rather than the prices:
+
+- **No durations.** Only the three massages carry a length. `duration_minutes` is
+  `not null` and §6 builds the availability grid from it, so all 43 need one from the
+  owner. A guessed duration produces bookings that overlap in real life while looking
+  correct in the diary.
+- **No turnaround, and no room/chair mapping** (`service_resources`).
+- **Still no therapist names.**
+- **The poster's phone number is +27 83-520-4875**, which is not the 063 352 5374 above.
+  Do not swap it in. Ask which is current.
+- **Confirm the poster itself is current** before entering anything.
+
 ---
 
 ## 3. Decisions that must not be casually reversed
@@ -279,7 +293,12 @@ clear.** Item 4 is done; the other four are not code and cannot be done from her
 
 6. `gbp_place_id` set, or `google_maps_url` replaced with the canonical listing URL.
 7. Confirm whether WhatsApp is a separate line from `063 352 5374`.
-8. Real photography for `/gallery`.
+8. Real photography for `/gallery`. **Ten photographs now exist** in `public/photos/` —
+   nine nail shots and the only interior shot of the salon. Five of the nine are confirmed
+   as the studio's own work (their brand card is in frame); four are not, and one looks
+   like a catalogue photo. Provenance and captioning rules are in
+   `docs/source-material/README.md`. Nothing references them yet — putting them on a page
+   is still to do.
 9. **Owner-in-hand test** (v2 §12.B) — she does four tasks on her own phone, unprompted.
 10. **One real customer** books end to end, cold (v2 §12.C).
 
@@ -323,7 +342,9 @@ tests/                  the v2 §12.A acceptance tests, against real Postgres
 ```
 
 Design: the organising device is a **lacquer swatch** — a nail bar's characteristic object is
-its colour range, and there is no photography. Each treatment carries its own colour across
+its colour range, and there was no photography when it was chosen. (There is some now, in
+`public/photos/`, but nothing uses it yet — the swatch system is still what the site runs
+on, and replacing it is a design decision rather than a consequence of the photos arriving.) Each treatment carries its own colour across
 the whole site. Palette and reasoning are at the top of `app/globals.css`.
 
 **Run the tests before changing anything in `lib/`.** They are the specification made
