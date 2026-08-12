@@ -67,13 +67,18 @@ export default async function HomePage() {
           />
         </div>
 
-        <div className="relative mx-auto max-w-5xl px-5 pt-10 pb-14 sm:pt-14 sm:pb-20">
+        <div className="relative mx-auto max-w-5xl px-5 pt-12 pb-14 sm:pt-16 sm:pb-20">
+          {/* The only logo on the page now that the header has given it up, so
+              it is bigger than it was and stands on its own line rather than
+              being tucked under the header. Left-aligned on the same edge as
+              the eyebrow, the headline and the button: it is the first item in
+              that column, not a centred crest floating above it. */}
           <GraceMark
             title={business.name}
-            className="h-20 w-20 text-aubergine-900 sm:h-28 sm:w-28"
+            className="h-24 w-24 text-aubergine-900 sm:h-32 sm:w-32"
           />
 
-          <p className="mt-7 text-[0.7rem] tracking-[0.28em] text-gilt-600 uppercase">
+          <p className="mt-8 text-[0.7rem] tracking-[0.28em] text-gilt-600 uppercase sm:mt-10">
             {SITE.heroPlace}
           </p>
 
