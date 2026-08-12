@@ -6,6 +6,7 @@ import { BookingSummary, type PendingBooking } from './booking-summary';
 import { loadSession, newConversationId, saveSession } from './chat-session';
 import { ChatInput } from './chat-input';
 import { ChatMessage, ChatThinking, type ChatTurn } from './chat-message';
+import { GraceMark } from '@/components/grace-mark';
 import { ManageLink } from './manage-link';
 import { ServiceCards } from './service-cards';
 import { SuggestionButtons } from './suggestion-buttons';
@@ -217,11 +218,17 @@ export function ChatWindow({
       className="fixed inset-0 z-50 flex flex-col bg-blush-50 sm:inset-auto sm:right-5 sm:bottom-5 sm:h-[min(38rem,calc(100vh-3rem))] sm:w-[24rem] sm:rounded-2xl sm:border sm:border-blush-200 sm:shadow-2xl"
     >
       <header className="flex items-center justify-between border-b border-blush-200 px-4 py-3">
-        <div>
+        {/* The mark instead of the studio's name in text, which the mark
+            already carries. "Assistant" stays: the logo says whose this is,
+            not what it is, and a panel that opens over the page should say
+            what it is.
+
+            The mark is decorative here on purpose. The dialog is already
+            labelled "Chat with {businessName}", so titling the mark as well
+            would read the studio's name out twice on the way in. */}
+        <div className="flex items-center gap-2.5 text-aubergine-900">
+          <GraceMark variant="compact" className="h-9 w-9 shrink-0" />
           <p className="text-[0.65rem] tracking-[0.22em] text-gilt-600 uppercase">Assistant</p>
-          <p className="font-display text-lg leading-tight font-semibold text-aubergine-900">
-            {businessName}
-          </p>
         </div>
         <button
           type="button"
