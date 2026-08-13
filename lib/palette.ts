@@ -47,3 +47,26 @@ export function lacquerFor(serviceName: string): Lacquer {
   const key = serviceName.trim().toLowerCase();
   return RANGE[key] ?? FALLBACK[hash(key) % FALLBACK.length];
 }
+
+/**
+ * The homepage's four doors, as a set of colours rather than four independent
+ * ones — they are seen side by side and nowhere else, so they are picked to sit
+ * together: the house pink leads, then plum, then the green of the studio's own
+ * foliage wall, then the gilt already used for the site's hairlines.
+ *
+ * Deliberately NOT `lacquerFor(label)`. That hashes into a five-colour fallback
+ * range, so labels collide: two treatments on /services already come out "Iris".
+ *
+ * The gallery's door was built as a PHOTOGRAPH of real nail work, cut to the
+ * nail outline, on the reasoning that the door may as well show what is behind
+ * it. Rendered at the size it is actually used, 56px across, it read as a
+ * sticker rather than a nail, and beside three flat lacquers it looked like a
+ * broken image. Four colours it is. Do not re-litigate it without looking at
+ * it on screen first.
+ */
+export const DESTINATION_LACQUERS: Record<string, Lacquer> = {
+  treatments: { base: '#a01049', tint: '#d94a80', ink: '#8E0D41', shade: 'House Lacquer' },
+  gallery: { base: '#5B3A6E', tint: '#815995', ink: '#4B2F5B', shade: 'Plum Velvet' },
+  about: { base: '#4A6247', tint: '#6E8A69', ink: '#3B4F39', shade: 'Eucalyptus' },
+  contact: { base: '#8A6A2F', tint: '#B79350', ink: '#725726', shade: 'Antique Gold' },
+};

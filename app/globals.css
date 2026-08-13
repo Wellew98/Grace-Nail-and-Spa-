@@ -97,14 +97,14 @@ body {
 -------------------------------------------------------------------------- */
 .swatch {
   position: relative;
+  border-radius: 46% 46% 44% 44% / 38% 38% 26% 26%;
+  overflow: hidden;
   background:
     /* the cuticle end, in shadow where the nail meets the finger */
     linear-gradient(to top, rgb(0 0 0 / 0.26) 0%, rgb(0 0 0 / 0) 20%),
     /* the free edge catching the light */
     linear-gradient(to bottom, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0) 13%),
     linear-gradient(158deg, var(--swatch-tint, #c2185b) 0%, var(--swatch, #a01049) 72%);
-  border-radius: 46% 46% 44% 44% / 38% 38% 26% 26%;
-  overflow: hidden;
 }
 
 /* One highlight down the nail bed, brightest near the tip. */

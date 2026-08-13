@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { lacquerFor } from '@/lib/palette';
+import { type Lacquer, lacquerFor } from '@/lib/palette';
 
 /**
  * The signature element: a painted nail.
@@ -28,19 +28,32 @@ export function Swatch({
   size = 'chip',
   className = '',
   style,
+  lacquer: override,
 }: {
   serviceName: string;
-  size?: 'stick' | 'chip' | 'dot';
+  size?: 'stick' | 'tile' | 'chip' | 'dot';
   className?: string;
   style?: CSSProperties;
+  /**
+   * An explicit colour, for the few swatches that do not stand for a treatment.
+   *
+   * The homepage's destination tiles are the only case: their colours are
+   * chosen so the four sit together, and `lacquerFor` cannot do that. It hashes
+   * a name into a five-colour fallback range, so two of four labels landing on
+   * the same colour is likely rather than unlucky — it already happens on the
+   * treatment list, where two services both come out "Iris".
+   */
+  lacquer?: Lacquer;
 }) {
-  const lacquer = lacquerFor(serviceName);
+  const lacquer = override ?? lacquerFor(serviceName);
   const dimensions =
     size === 'stick'
       ? 'w-16 h-[5.5rem] sm:w-[4.5rem] sm:h-[6.25rem]'
-      : size === 'chip'
-        ? 'w-7 h-10'
-        : 'w-3.5 h-5';
+      : size === 'tile'
+        ? 'w-9 h-12 sm:w-14 sm:h-[4.75rem]'
+        : size === 'chip'
+          ? 'w-7 h-10'
+          : 'w-3.5 h-5';
 
   return (
     <span
