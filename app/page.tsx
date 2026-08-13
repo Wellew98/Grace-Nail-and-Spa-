@@ -70,21 +70,26 @@ export default async function HomePage() {
           button sits directly beneath it.
 
           The blush wash and the photograph bleeding in from the right are the
-          banner's too. The photograph is desktop-only: the whole reason the
-          hero has never carried an image is that one pushes the button below
-          the fold on a phone, and that is still true. -------------------- */}
+          banner's too.
+
+          THE PHOTOGRAPH IS ON PHONES AS WELL NOW. It used to be desktop-only,
+          on the rule that an image in the hero pushes the button below the fold
+          on a phone. That rule is about images IN THE FLOW; this one is
+          absolutely positioned behind the text and adds no height at all, so
+          the button has not moved. It is narrower, dimmer and faded harder
+          there so the copy still reads over it. ---------------------------- */}
       <section className="relative isolate overflow-hidden border-b border-gilt-200/70 bg-gradient-to-b from-blush-200 via-blush-100 to-blush-50">
         <div
           aria-hidden="true"
-          className="photo-fade pointer-events-none absolute inset-y-0 right-0 hidden w-[44%] lg:block"
+          className="photo-fade pointer-events-none absolute inset-y-0 right-0 w-[58%] sm:w-[50%] lg:w-[44%]"
         >
           <Image
             src={STUDIO_PHOTO.src}
             alt=""
             fill
-            sizes="44vw"
+            sizes="(min-width: 1024px) 44vw, (min-width: 640px) 50vw, 58vw"
             priority
-            className="object-cover object-[60%_center] opacity-60"
+            className="object-cover object-[60%_center] opacity-40 sm:opacity-50 lg:opacity-60"
           />
         </div>
 

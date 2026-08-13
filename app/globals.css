@@ -136,10 +136,24 @@ body {
 }
 
 /* The hero photograph has no frame: it fades out across its own left edge into
-   the blush wash, the way the pictures do on the studio's printed banner. */
+   the blush wash, the way the pictures do on the studio's printed banner.
+
+   The fade is LONGER on a phone, and that is the whole trick to having the
+   photograph there at all. On a wide screen the text column and the picture
+   occupy different halves and never meet. On a phone the headline, the hours
+   and "get in touch" all run the full width, straight across the picture — so
+   the mask holds the photograph off until 72% of its own width, leaving the
+   copy on quiet ground and the picture as a band down the right-hand edge. */
 .photo-fade {
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%);
-  mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 72%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 72%);
+}
+
+@media (min-width: 1024px) {
+  .photo-fade {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+    mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+  }
 }
 
 /* Horizontal pickers scroll by swipe; the bar itself is noise on a phone. */
