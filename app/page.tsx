@@ -3,21 +3,15 @@ import Link from 'next/link';
 import { BookButton } from '@/components/book-button';
 import { GraceMark } from '@/components/grace-mark';
 import { Swatch } from '@/components/swatch';
-import { getActiveServices, getBusiness, getOpeningHours } from '@/lib/public-data';
-import { summariseOpeningHours } from '@/lib/hours';
+import { getActiveServices, getBusiness } from '@/lib/public-data';
 import { DESTINATION_LACQUERS } from '@/lib/palette';
 import { formatPhoneForDisplay } from '@/lib/phone';
-import { STUDIO_PHOTO } from '@/lib/photos';
+import { NAIL_PHOTOS, STUDIO_PHOTO } from '@/lib/photos';
 import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
   const business = (await getBusiness())!;
-  const [allServices, hours] = await Promise.all([
-    getActiveServices(business.id),
-    getOpeningHours(business.id),
-  ]);
-
-  const hoursLine = summariseOpeningHours(hours);
+  const allServices = await getActiveServices(business.id);
 
   /**
    * The four doors off the homepage, in the order a first-time visitor wants
@@ -121,17 +115,7 @@ export default async function HomePage() {
             </span>
           </h1>
 
-          {/* The hours, on the rose rule the banner prints them on — but read
-              from working_hours, so they cannot drift from the footer, the
-              JSON-LD or what the booking engine will actually offer. */}
-          {hoursLine && (
-            <p className="mt-7 flex flex-wrap items-center gap-x-3 gap-y-2 text-[0.7rem] tracking-[0.12em] text-lacquer-600 uppercase">
-              <span aria-hidden="true" className="h-px w-8 shrink-0 bg-lacquer-400" />
-              <span className="tabular font-mono">{hoursLine}</span>
-            </p>
-          )}
-
-          <p className="mt-6 max-w-md text-[1.05rem] leading-relaxed text-mauve-500">
+          <p className="mt-7 max-w-md text-[1.05rem] leading-relaxed text-mauve-500">
             {SITE.heroSupport}
           </p>
 
@@ -206,6 +190,49 @@ export default async function HomePage() {
           ))}
         </ul>
       </nav>
+
+      {/* ---------------- two from the gallery ----------------
+          The first two photographs on /gallery, in the order that page shows
+          them, so the homepage cannot end up displaying different "best" work
+          than the gallery leads with — reorder lib/photos.ts and both follow.
+
+          Both are among the five carrying the studio's own brand card in
+          frame, so they are demonstrably its work. They are still not
+          captioned as such: lib/photos.ts sets the rule and only the alt text,
+          which describes the picture rather than claiming it, goes on the
+          page.
+
+          One is landscape and one portrait. They are cropped to a shared 4:5
+          so the pair reads as a pair rather than as two loose images, and the
+          pair is held to a narrower measure than the doors above it: at the
+          full width of the page each one came out nearly a screen tall, which
+          made the closing note the biggest thing on a page whose whole point
+          is now restraint. ------------------------------------------------- */}
+      <section aria-labelledby="work-heading" className="mx-auto mt-14 max-w-5xl px-5 sm:mt-20">
+        <h2 id="work-heading" className="sr-only">
+          From the studio
+        </h2>
+
+        <ul className="grid grid-cols-2 gap-3 sm:max-w-3xl sm:gap-5">
+          {NAIL_PHOTOS.slice(0, 2).map((photo) => (
+            <li key={photo.src}>
+              <Link
+                href="/gallery"
+                className="group block overflow-hidden rounded-2xl bg-blush-100"
+              >
+                <Image
+                  src={photo.src}
+                  alt={photo.alt}
+                  width={photo.width}
+                  height={photo.height}
+                  sizes="(min-width: 640px) 23rem, 50vw"
+                  className="aspect-[4/5] w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
     </>
   );
 }

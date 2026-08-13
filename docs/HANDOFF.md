@@ -370,7 +370,6 @@ lib/db.ts               pool, transactions, SQLSTATE handling, connection diagno
 lib/health.ts           the checks behind /api/health
 lib/time.ts             timezone conversion at the edges
 lib/site.ts             every word of prose, and the rule for what may be claimed
-lib/hours.ts            the opening hours as one line, for the homepage hero
 components/grace-mark.tsx  the studio's logo, drawn — read its header before editing
 app/admin/              today · week · walk-in · blocks · settings
 app/privacy/            v2 §9 — the POPIA notice. Read its header before editing a word of it
