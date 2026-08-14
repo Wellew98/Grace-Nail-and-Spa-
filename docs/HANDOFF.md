@@ -303,9 +303,12 @@ clear.** Item 4 is done; the other four are not code and cannot be done from her
 2. **Transactional email configured** — `RESEND_API_KEY`, `BOOKING_FROM_EMAIL`,
    `OWNER_NOTIFICATION_EMAIL`. Built, and silently no-ops without them: the customer books,
    receives nothing, and phones to check.
-3. **Production branch off the feature branch.** Supabase still points at
-   `claude/project-doc-8cv2my`, so every push migrates production with no review step.
-   Create `main`, point Supabase and Vercel at it.
+3. **Production branch off the feature branch.** Half done. `main` exists and **Vercel
+   serves it** — verified 14 Aug 2026 by pushing to `main` and watching it reach the live
+   URL. Two settings are still outstanding: the **Supabase** integration's production branch,
+   which lives in the Supabase dashboard and cannot be checked from the repo, and **GitHub's
+   default branch**, which is still `claude/project-doc-8cv2my`. See the deploy section of
+   the README for what goes wrong under each. Nothing here blocks a code-only change.
 4. ~~**Privacy notice on `/book`**~~ — **done**, see §11.
 5. **Booking URL on the Google Business Profile.** For a spa in Glenanda, Maps is where the
    traffic is. Omitted from v1 entirely.
