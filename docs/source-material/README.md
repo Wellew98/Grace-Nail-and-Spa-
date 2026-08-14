@@ -9,6 +9,11 @@ outside the shop** — arrived separately and is not a file in this repository.
 What was taken from it is described under "The shopfront banner" below. It is
 where the logo, the hero's wording and the hero's colours now come from.
 
+A thirteenth — **screenshots of the review panel** on the profile — arrived the
+same way and is likewise not committed. The four reviews in them are transcribed
+into `lib/reviews.ts` and now close the homepage. See "The review screenshots"
+below, and read the rule about not adding them up before touching that section.
+
 **The menu has been entered, provisionally** — `supabase/migrations/0006_poster_menu.sql`
 puts all 43 services in with the poster's real names and prices, deactivating
 the six invented treatments from `0004`. The rows keep the `dddddddd-` prefix so
@@ -93,7 +98,73 @@ below — but nothing was copied across, and nothing should be.
 
 ---
 
-## The price poster — `price-menu-poster.webp`
+## The review screenshots
+
+Five screenshots of the review panel on the Google Business Profile, sent by the
+owner in August 2026. Four reviews: one of them (Rachel Molongoana) was sent
+twice, so the set is four and not five.
+
+### Why they are not committed either
+
+Same reasoning as the banner, plus one that is specific to reviews.
+
+The filing reason: every part of them that matters is transcribed into
+`lib/reviews.ts`, and nothing on the site reads the files.
+
+The reason particular to these: **each screenshot carries the reviewer's Google
+profile photograph** — four real faces, cropped from four Google accounts. There
+is no permission on file to republish those anywhere, and putting them in
+`public/` would make each one a live image URL on the studio's own domain. The
+homepage puts the reviewer's initial in a blush disc where the avatar was.
+
+There is a plain build reason as well. A screenshot of a review is a
+fixed-width picture of small grey type: it will not reflow on a phone, a screen
+reader gets nothing from it, it cannot be selected or searched, and it goes soft
+on a retina display. Set as text it does all of that properly, and the rating
+is drawn in the site's own painted-nail swatch rather than in Google's stars.
+
+### Transcribed
+
+Verbatim, including the spelling. `lib/reviews.ts` is the live copy.
+
+| Reviewer | Google's badge | Stars | Left | Quoted |
+|---|---|---|---|---|
+| Lindokuhle Magasela | Local Guide · 11 reviews · 2 photos | 5 | "6 months ago" | In full, as the lead pull quote |
+| Rachel Molongoana | Local Guide · 26 reviews · 27 photos | 5 | "a year ago" | In full |
+| Neo Maluleka | Local Guide · 65 reviews · 5 photos | 5 | "a year ago" | In full |
+| Jane Steuart | 6 reviews | 5 | "a year ago" | The visible sentence only — see below |
+
+**Relative ages are not on the site.** "6 months ago" was true the day the
+screenshot was taken and rots quietly afterwards; the year is coarser and stays
+right. From August 2026, "6 months ago" is 2026 and "a year ago" is 2025, and
+`Review.year` holds nothing more precise than that because nothing more precise
+is known.
+
+**Jane Steuart's is truncated at source.** Google collapsed it with its own
+"…More", so what is quoted is the complete sentence that was visible and not the
+whole review. Her screenshot also shows Google's structured-question label,
+`Requested style:`, which is Google's furniture rather than her words and is left
+off. If the owner can open the full text, it can be quoted in full.
+
+**Lindokuhle Magasela's names a price that is not on the menu**: "their January
+special (R100 for 45min massage)". Past tense and tied to a named month, so it
+reads as a promotion that has been and gone, and it is quoted in full because
+that is what she wrote. Worth asking the owner whether she wants it trimmed —
+`lib/reviews.ts` says which clause to cut and to leave an ellipsis behind if so.
+
+### ⛔ FOUR FIVE-STAR REVIEWS ARE NOT A RATING FOR THE BUSINESS
+
+The profile shows **3.7 across 77 reviews**. These four are the good ones, which
+is the owner's to choose and is what every business does with its own reviews —
+but the site quotes them and counts nothing:
+
+- no average, no review count, no "rated 5 stars" in any copy;
+- no `aggregateRating` and no `review` in the JSON-LD. That rule is older than
+  this section and is recorded in `components/local-business-jsonld.tsx`:
+  Google's guidelines forbid a site marking up its own ratings about itself, and
+  a manual action costs more than the stars are worth;
+- the section ends in a link to the listing, so a reader is one tap from all 77
+  rather than only these four. **That link is load-bearing. Do not remove it.**
 
 A printed menu, "GRACE NAILS & BEAUTY SPA", with a full service list and
 prices. This is the first real data we have against `HANDOFF.md` §2, which calls

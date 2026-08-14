@@ -68,6 +68,22 @@ export const SITE = {
       'Appointments are the length they say they are. The time it takes to turn a room around afterwards is booked separately, behind your appointment, so it never comes out of yours.',
     ],
   },
+  /**
+   * The homepage's review section. The reviews themselves are in
+   * lib/reviews.ts, with the rules about what may and may not be said around
+   * them: quoted verbatim, never added up into a rating, always one tap from
+   * the full listing.
+   *
+   * `note` carries that last part and is the reason the section can run at all,
+   * so it keeps the link in it. "Quoted as they were left" is doing real work
+   * too: it tells the reader why one of them is written in text-speak, which
+   * otherwise looks like a typo on our side rather than a guest's own voice.
+   */
+  reviews: {
+    heading: 'In their own words',
+    note: 'Four of the reviews on our Google listing, quoted as they were left.',
+    link: 'Read them all on Google',
+  },
   gallery: {
     lead: 'Our work, and our room.',
     // The photographs are the studio's own, off its Google Business Profile.

@@ -2,11 +2,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { BookButton } from '@/components/book-button';
 import { GraceMark } from '@/components/grace-mark';
+import { ReviewQuote } from '@/components/review-quote';
 import { Swatch } from '@/components/swatch';
 import { getActiveServices, getBusiness } from '@/lib/public-data';
 import { DESTINATION_LACQUERS } from '@/lib/palette';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { NAIL_PHOTOS, STUDIO_PHOTO } from '@/lib/photos';
+import { LEAD_REVIEW, SHORT_REVIEWS } from '@/lib/reviews';
 import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
@@ -232,6 +234,73 @@ export default async function HomePage() {
             </li>
           ))}
         </ul>
+      </section>
+
+      {/* ---------------- in their own words ----------------
+          Four reviews off the studio's Google listing, and the last thing on
+          the page: the hero asks for the booking, the doors and the two
+          photographs answer "what is this place", and this answers "does
+          anyone rate it", which is the question a first-time visitor is
+          actually holding when their thumb is over the button.
+
+          IT IS A FULL-WIDTH BAND ON PURPOSE. Everything between the hero and
+          here is contained to max-w-5xl on the body ground, so a fourth
+          contained block would have read as more of the same and the page
+          would have simply stopped. Tinting the last one and ruling it top and
+          bottom bookends the page against the hero band, which is the only
+          other tinted thing on it. The footer is blush too, so the band is the
+          lighter blush-100/70 and the footer's own mt-24 keeps six rems of
+          body ground between them rather than letting the two merge into one
+          long pink foot.
+
+          The long review leads as a pull quote and the three short ones sit
+          under it, which is a hierarchy rather than four equal tiles: three of
+          these are one or two sentences, and four cards of wildly different
+          lengths in one grid is the layout that made it look like filler.
+
+          WHAT THIS SECTION MAY NOT DO is add the four of them up. They are
+          five-star reviews off a profile averaging 3.7, chosen by the owner, so
+          the copy quotes them and counts nothing, and the link to the listing
+          is not decorative. lib/reviews.ts has the whole rule, and
+          components/local-business-jsonld.tsx has the matching one for the
+          structured data: still no aggregateRating, still no review markup.
+          ------------------------------------------------------------------ */}
+      <section
+        aria-labelledby="reviews-heading"
+        className="mt-14 border-y border-gilt-200/70 bg-blush-100/70 sm:mt-20"
+      >
+        <div className="mx-auto max-w-5xl px-5 py-12 sm:py-16">
+          <h2
+            id="reviews-heading"
+            className="text-[0.7rem] tracking-[0.28em] text-gilt-600 uppercase"
+          >
+            {SITE.reviews.heading}
+          </h2>
+
+          <div className="mt-7 sm:mt-9">
+            <ReviewQuote review={LEAD_REVIEW} tone="lead" />
+          </div>
+
+          <ul className="mt-9 grid gap-3 border-t border-gilt-200/70 pt-9 sm:mt-11 sm:grid-cols-3 sm:gap-5 sm:pt-11">
+            {SHORT_REVIEWS.map((review) => (
+              <li key={review.author}>
+                <ReviewQuote review={review} tone="card" />
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-9 text-sm leading-relaxed text-mauve-500">
+            {SITE.reviews.note}{' '}
+            {business.google_maps_url && (
+              <a
+                href={business.google_maps_url}
+                className="text-lacquer-500 underline underline-offset-4 hover:text-lacquer-600"
+              >
+                {SITE.reviews.link}
+              </a>
+            )}
+          </p>
+        </div>
       </section>
     </>
   );
