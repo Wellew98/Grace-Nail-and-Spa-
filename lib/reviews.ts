@@ -26,8 +26,16 @@
  * WHERE THE FILES COME FROM
  *
  * The owner supplied five screenshots of the review panel in August 2026 (four
- * reviews; Rachel Molongoana was sent twice). They live in `public/reviews/`
- * and are referenced by `screenshot` below.
+ * reviews; Rachel Molongoana was sent twice, and the duplicate is not kept).
+ * They live in `public/reviews/` and are referenced by `screenshot` below.
+ *
+ * They arrived as PNGs and were converted to **lossless** webp, which matches
+ * `public/photos/` and halved the weight (105KB to 47KB across the four).
+ * Lossless is not fussiness: these are small grey glyphs on flat white, and
+ * lossy webp rings around exactly those edges, so the compression artefact
+ * lands on the one thing the picture exists to show. Verified pixel-identical
+ * to the PNGs after conversion, byte for byte across all four. If they are ever
+ * re-exported, keep `lossless: true` and check the text at full size.
  *
  * `public/` is served, so each of these is a live URL on the studio's own
  * domain, which is deliberate here and worth being clear about: publishing them
@@ -86,27 +94,27 @@ export interface Review {
  */
 export const REVIEWS: Review[] = [
   {
-    screenshot: '/reviews/review-01-lindokuhle-magasela.png',
+    screenshot: '/reviews/review-01-lindokuhle-magasela.webp',
     rating: 5,
     quote:
       'The massage I had was absolutely divine. The ladies were professional and did an amazing job on our full body massages. This was our third time returning for this treatment and it felt like such a bargain because we had paid for their January special (R100 for 45min massage). I would definitely recommend them for full body, foot and back massages. We got more than what we had expected.',
     author: 'Lindokuhle Magasela',
   },
   {
-    screenshot: '/reviews/review-02-rachel-molongoana.png',
+    screenshot: '/reviews/review-02-rachel-molongoana.webp',
     rating: 5,
     quote:
       'Great customer service, clean space, faster than most places, without compromising quality. Prices are also fair.',
     author: 'Rachel Molongoana',
   },
   {
-    screenshot: '/reviews/review-03-neo-maluleka.png',
+    screenshot: '/reviews/review-03-neo-maluleka.webp',
     rating: 5,
     quote: "U made my birthday so relaxing. Thank u.. my sister's enjoyed... Will b back soon for sure..",
     author: 'Neo Maluleka',
   },
   {
-    screenshot: '/reviews/review-04-jane-steuart.png',
+    screenshot: '/reviews/review-04-jane-steuart.webp',
     rating: 5,
     quote: 'Exactly what I wanted - thank you.',
     author: 'Jane Steuart',

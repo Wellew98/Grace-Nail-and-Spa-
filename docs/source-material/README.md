@@ -9,10 +9,11 @@ outside the shop** — arrived separately and is not a file in this repository.
 What was taken from it is described under "The shopfront banner" below. It is
 where the logo, the hero's wording and the hero's colours now come from.
 
-A thirteenth — **screenshots of the review panel** on the profile — arrived the
-same way and is likewise not committed. The four reviews in them are transcribed
-into `lib/reviews.ts` and now close the homepage. See "The review screenshots"
-below, and read the rule about not adding them up before touching that section.
+A thirteenth — **screenshots of the review panel** on the profile — is different
+from the other two: it IS committed, as four lossless webp files in
+`public/reviews/`, and the pictures themselves close the homepage. See "The
+review screenshots" below for why showing the picture beats re-setting the words,
+and read the rule about not adding them up before touching that section.
 
 **The menu has been entered, provisionally** — `supabase/migrations/0006_poster_menu.sql`
 puts all 43 services in with the poster's real names and prices, deactivating
@@ -104,41 +105,75 @@ Five screenshots of the review panel on the Google Business Profile, sent by the
 owner in August 2026. Four reviews: one of them (Rachel Molongoana) was sent
 twice, so the set is four and not five.
 
-### Why they are not committed either
+### These ARE committed, and they are what the homepage shows
 
-Same reasoning as the banner, plus one that is specific to reviews.
+Unlike the banner and the poster, these four are in `public/reviews/` and are
+rendered on the page. That is the point of them.
 
-The filing reason: every part of them that matters is transcribed into
-`lib/reviews.ts`, and nothing on the site reads the files.
+**This was got wrong once and the reasoning is worth keeping.** The four reviews
+were first transcribed and rebuilt as cards in the site's own type, with the
+rating redrawn as painted nails, on grounds of reflow, screen readers and retina
+sharpness. Every one of those points is true and none of them matters, because
+it throws away the only thing a review has: **provenance.** Google's stars,
+Google's layout, the "Local Guide" badge and the reviewer's own profile
+photograph are things this site cannot fabricate, which is precisely why a
+visitor believes them. Re-set in our fonts, the same words are a claim we typed
+about ourselves. The rebuild read better and proved nothing.
 
-The reason particular to these: **each screenshot carries the reviewer's Google
-profile photograph** — four real faces, cropped from four Google accounts. There
-is no permission on file to republish those anywhere, and putting them in
-`public/` would make each one a live image URL on the studio's own domain. The
-homepage puts the reviewer's initial in a blush disc where the avatar was.
+So the pictures go up as they are. The transcription below is still used, as
+the images' **alt text**, which is how a screen reader gets the review and how
+the words reach a crawler. That covers the accessibility half of the old
+argument without giving up the evidence.
 
-There is a plain build reason as well. A screenshot of a review is a
-fixed-width picture of small grey type: it will not reflow on a phone, a screen
-reader gets nothing from it, it cannot be selected or searched, and it goes soft
-on a retina display. Set as text it does all of that properly, and the rating
-is drawn in the site's own painted-nail swatch rather than in Google's stars.
+One thing the old note got right and it still stands: publishing these
+republishes four reviewers' Google profile photographs on the studio's own
+domain. These are the studio's own reviews, already public on its listing, and
+the owner asked for them to go up as they are.
+
+### The files
+
+Converted from the uploaded PNGs to **lossless** webp, matching `public/photos/`.
+
+| File | Size | From |
+|---|---|---|
+| `review-01-lindokuhle-magasela.webp` | 812×232 | `Screenshot 2026-08-14 110705.png` |
+| `review-02-rachel-molongoana.webp` | 839×162 | `Screenshot 2026-08-14 110949.png` |
+| `review-03-neo-maluleka.webp` | 812×138 | `Screenshot 2026-08-14 110901.png` |
+| `review-04-jane-steuart.webp` | 853×159 | `Screenshot 2026-08-14 111056.png` |
+
+105KB of PNG became 47KB of webp, and the conversion was verified
+pixel-identical to the sources, byte for byte across all four. **Keep
+`lossless: true` if these are ever re-exported.** They are small grey glyphs on
+flat white, which is the worst case for lossy webp: it rings around exactly
+those edges, so the artefact lands on the one thing the picture exists to show.
+
+A fifth upload, `Screenshot 2026-08-i14 110949.png`, was a second capture of
+Rachel Molongoana's review and is not kept. The uploads landed in the repository
+root and were removed once converted.
+
+**These do not reflow.** An 812px-wide capture shown on a 390px phone is drawn
+at 43%, so Google's already-small review type gets genuinely small. That is
+inherent to a screenshot and cannot be fixed by CSS. If it proves to be a
+problem, the fix is to make each one tappable through to the Google listing,
+where it is readable and verifiable; it is deliberately not done yet.
 
 ### Transcribed
 
-Verbatim, including the spelling. `lib/reviews.ts` is the live copy.
+Verbatim, including the spelling. These transcriptions are the images' **alt
+text** and nothing else is rendered from them; `lib/reviews.ts` is the live copy.
 
-| Reviewer | Google's badge | Stars | Left | Quoted |
+| Reviewer | Google's badge | Stars | Left | In the alt text |
 |---|---|---|---|---|
-| Lindokuhle Magasela | Local Guide · 11 reviews · 2 photos | 5 | "6 months ago" | In full, as the lead pull quote |
+| Lindokuhle Magasela | Local Guide · 11 reviews · 2 photos | 5 | "6 months ago" | In full |
 | Rachel Molongoana | Local Guide · 26 reviews · 27 photos | 5 | "a year ago" | In full |
 | Neo Maluleka | Local Guide · 65 reviews · 5 photos | 5 | "a year ago" | In full |
 | Jane Steuart | 6 reviews | 5 | "a year ago" | The visible sentence only — see below |
 
-**Relative ages are not on the site.** "6 months ago" was true the day the
-screenshot was taken and rots quietly afterwards; the year is coarser and stays
-right. From August 2026, "6 months ago" is 2026 and "a year ago" is 2025, and
-`Review.year` holds nothing more precise than that because nothing more precise
-is known.
+**The badge and the date are not re-typed anywhere.** They are visible in the
+pictures, which is where they belong: a date the site prints has to be kept
+true, and one inside a screenshot is simply what Google showed that day. The
+earlier text version had to carry a rule about this, because "6 months ago" goes
+stale while the page does not. That problem left with the rebuild.
 
 **Jane Steuart's is truncated at source.** Google collapsed it with its own
 "…More", so what is quoted is the complete sentence that was visible and not the
