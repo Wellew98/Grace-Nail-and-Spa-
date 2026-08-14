@@ -70,22 +70,3 @@ export const DESTINATION_LACQUERS: Record<string, Lacquer> = {
   about: { base: '#4A6247', tint: '#6E8A69', ink: '#3B4F39', shade: 'Eucalyptus' },
   contact: { base: '#8A6A2F', tint: '#B79350', ink: '#725726', shade: 'Antique Gold' },
 };
-
-/**
- * A review's rating, counted in painted nails instead of stars.
- *
- * The site already owns a nail shape that nothing else on the web has, and a
- * row of five of them says "five out of five" by position the way five stars
- * does, without borrowing Google's furniture onto our own page. `painted` is
- * the house lacquer, so a full rating reads as the studio's own colour.
- *
- * `bare` is an UNPAINTED nail, not a grey star: blush with barely any contrast
- * against the card, so the painted ones are what the eye counts. It is for the
- * rating that is not five. All four reviews quoted today are five, so it
- * renders nowhere on the site as it stands, and it is here so the first
- * four-star review to go up does not need a colour invented under pressure.
- */
-export const RATING_LACQUERS: { painted: Lacquer; bare: Lacquer } = {
-  painted: { base: '#a01049', tint: '#d94a80', ink: '#8E0D41', shade: 'House Lacquer' },
-  bare: { base: '#e0cac6', tint: '#f2dedb', ink: '#7a5a72', shade: 'Bare' },
-};

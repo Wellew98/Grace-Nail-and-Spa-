@@ -2,13 +2,13 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { BookButton } from '@/components/book-button';
 import { GraceMark } from '@/components/grace-mark';
-import { ReviewQuote } from '@/components/review-quote';
+import { ReviewScreenshot } from '@/components/review-screenshot';
 import { Swatch } from '@/components/swatch';
 import { getActiveServices, getBusiness } from '@/lib/public-data';
 import { DESTINATION_LACQUERS } from '@/lib/palette';
 import { formatPhoneForDisplay } from '@/lib/phone';
 import { NAIL_PHOTOS, STUDIO_PHOTO } from '@/lib/photos';
-import { LEAD_REVIEW, SHORT_REVIEWS } from '@/lib/reviews';
+import { REVIEWS } from '@/lib/reviews';
 import { SITE } from '@/lib/site';
 
 export default async function HomePage() {
@@ -236,34 +236,49 @@ export default async function HomePage() {
         </ul>
       </section>
 
-      {/* ---------------- in their own words ----------------
-          Four reviews off the studio's Google listing, and the last thing on
-          the page: the hero asks for the booking, the doors and the two
-          photographs answer "what is this place", and this answers "does
-          anyone rate it", which is the question a first-time visitor is
-          actually holding when their thumb is over the button.
+      {/* ---------------- straight off the Google listing ----------------
+          Four reviews, as the owner's own screenshots of Google's review
+          panel, and the last thing on the page: the hero asks for the booking,
+          the doors and the two photographs answer "what is this place", and
+          this answers "does anyone rate it", which is the question a
+          first-time visitor is actually holding when their thumb is over the
+          button.
+
+          THEY ARE PICTURES AND THEY STAY PICTURES. An earlier version of this
+          section transcribed the four reviews and rebuilt them as cards in the
+          site's own type, with the rating drawn as painted nails. It looked
+          better and it was worth nothing: our markup, in our fonts, saying
+          nice things about us, is a claim rather than evidence, and any
+          business can type it. Google's stars, Google's layout and the
+          reviewers' own profile photographs cannot be faked by this site,
+          which is precisely why they persuade. See lib/reviews.ts before
+          undoing this again.
 
           IT IS A FULL-WIDTH BAND ON PURPOSE. Everything between the hero and
           here is contained to max-w-5xl on the body ground, so a fourth
           contained block would have read as more of the same and the page
           would have simply stopped. Tinting the last one and ruling it top and
-          bottom bookends the page against the hero band, which is the only
-          other tinted thing on it. The footer is blush too, so the band is the
-          lighter blush-100/70 and the footer's own mt-24 keeps six rems of
-          body ground between them rather than letting the two merge into one
-          long pink foot.
+          bottom bookends the page against the hero band. The footer is blush
+          too, so the band is the lighter blush-100/70 and the footer's own
+          mt-24 keeps six rems of body ground between them.
 
-          The long review leads as a pull quote and the three short ones sit
-          under it, which is a hierarchy rather than four equal tiles: three of
-          these are one or two sentences, and four cards of wildly different
-          lengths in one grid is the layout that made it look like filler.
+          ONE COLUMN, AND HELD TO max-w-3xl. This was built as two columns
+          first and that was wrong. A screenshot is a picture of text, so the
+          only thing that matters is the scale it ends up drawn at: two columns
+          puts each capture at roughly 470px, and Google's review type inside an
+          800px-wide capture then lands near eight pixels, which nobody can
+          read. Stacked at 768px it renders at or near native, and a capture
+          taken on a retina screen simply downsamples into it and comes out
+          sharper. Four clippings in a column also read as what they are, a
+          stack of evidence, rather than as a tidy grid of tiles.
+
+          If the files are ever replaced, check this width against the new
+          ones: everything here follows from how wide the captures actually
+          are, and nothing else in the section does.
 
           WHAT THIS SECTION MAY NOT DO is add the four of them up. They are
-          five-star reviews off a profile averaging 3.7, chosen by the owner, so
-          the copy quotes them and counts nothing, and the link to the listing
-          is not decorative. lib/reviews.ts has the whole rule, and
-          components/local-business-jsonld.tsx has the matching one for the
-          structured data: still no aggregateRating, still no review markup.
+          five-star reviews off a profile averaging 3.7, so the copy counts
+          nothing and the link to the listing is not decorative.
           ------------------------------------------------------------------ */}
       <section
         aria-labelledby="reviews-heading"
@@ -277,14 +292,10 @@ export default async function HomePage() {
             {SITE.reviews.heading}
           </h2>
 
-          <div className="mt-7 sm:mt-9">
-            <ReviewQuote review={LEAD_REVIEW} tone="lead" />
-          </div>
-
-          <ul className="mt-9 grid gap-3 border-t border-gilt-200/70 pt-9 sm:mt-11 sm:grid-cols-3 sm:gap-5 sm:pt-11">
-            {SHORT_REVIEWS.map((review) => (
-              <li key={review.author}>
-                <ReviewQuote review={review} tone="card" />
+          <ul className="mt-7 grid max-w-3xl gap-4 sm:mt-9 sm:gap-5">
+            {REVIEWS.map((review) => (
+              <li key={review.screenshot}>
+                <ReviewScreenshot review={review} />
               </li>
             ))}
           </ul>

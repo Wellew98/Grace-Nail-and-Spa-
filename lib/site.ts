@@ -69,19 +69,19 @@ export const SITE = {
     ],
   },
   /**
-   * The homepage's review section. The reviews themselves are in
-   * lib/reviews.ts, with the rules about what may and may not be said around
-   * them: quoted verbatim, never added up into a rating, always one tap from
-   * the full listing.
+   * The homepage's review section. The reviews go up as screenshots of Google's
+   * own panel; lib/reviews.ts carries the files and the rules around them,
+   * chiefly that four five-star reviews are never added up into a rating and
+   * that the reader stays one tap from the full listing.
    *
-   * `note` carries that last part and is the reason the section can run at all,
-   * so it keeps the link in it. "Quoted as they were left" is doing real work
-   * too: it tells the reader why one of them is written in text-speak, which
-   * otherwise looks like a typo on our side rather than a guest's own voice.
+   * `note` says the pictures are unretouched, which is the whole claim the
+   * section rests on, and it carries the link that backs the claim up. Say
+   * "screenshots" plainly: a reader who can see they are screenshots and is
+   * told so trusts them more than one left to work it out.
    */
   reviews: {
     heading: 'In their own words',
-    note: 'Four of the reviews on our Google listing, quoted as they were left.',
+    note: 'Screenshots of four reviews on our Google listing, exactly as they appear there.',
     link: 'Read them all on Google',
   },
   gallery: {
