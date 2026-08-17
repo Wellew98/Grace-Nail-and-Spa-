@@ -10,12 +10,20 @@
 
    Ground is blush rather than the usual spa cream; ink is aubergine rather
    than black. Gilt is used only for hairlines and eyebrows, never for fills.
+
+   The ground was chosen before we had seen the studio's own signage, and the
+   banner outside 11 Amanda Avenue turned out to be built on the same three
+   things: a blush wash, a rose-pink line carrying the opening hours, and near
+   black for the message. So the tokens below stand, and the homepage hero now
+   uses them the way the shopfront does — see app/page.tsx.
 --------------------------------------------------------------------------- */
 
 @theme {
   --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
   --font-sans: var(--font-karla), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', Menlo, monospace;
+  /* Reserved for the logo mark. Nothing else on the site is set in script. */
+  --font-script: var(--font-great-vibes), 'Snell Roundhand', cursive;
 
   --color-blush-50: #fdf8f7;
   --color-blush-100: #f9edeb;
@@ -72,24 +80,42 @@ body {
 }
 
 /* --------------------------------------------------------------------------
-   The signature: a swatch stick. A painted lacquer sample with a rounded top,
-   a soft gloss down one edge, and a colour set per treatment.
+   The signature: a painted nail. A lacquer sample in the shape of the thing
+   being painted — a squoval tip, a curved cuticle end, and one gloss down the
+   nail bed.
+
+   THE SHAPE IS THE ELLIPTICAL RADII, AND THEY ARE NOT ARBITRARY. The tip
+   corners curve across 46% of the width but only 38% of the height, so the tip
+   is a broad squoval rather than a semicircular dome; the cuticle end curves
+   too, at 26%, because a straight bottom edge is what made the old shape read
+   as a bar in a chart. It was 999px 999px 6px 6px — a paint-chart stick.
+
+   EVERY DEPTH CUE IS IN PERCENTAGES, deliberately. The same rule renders this
+   at 100px in the hero strip and at 20px in a list, and a px-based inset
+   shadow that looks like a cuticle on the big one swallows the small one
+   whole. Proportions live in components/swatch.tsx — see its header.
 -------------------------------------------------------------------------- */
 .swatch {
   position: relative;
-  background: linear-gradient(160deg, var(--swatch-tint, #c2185b) 0%, var(--swatch, #a01049) 68%);
-  border-radius: 999px 999px 6px 6px;
+  border-radius: 46% 46% 44% 44% / 38% 38% 26% 26%;
   overflow: hidden;
+  background:
+    /* the cuticle end, in shadow where the nail meets the finger */
+    linear-gradient(to top, rgb(0 0 0 / 0.26) 0%, rgb(0 0 0 / 0) 20%),
+    /* the free edge catching the light */
+    linear-gradient(to bottom, rgb(255 255 255 / 0.16) 0%, rgb(255 255 255 / 0) 13%),
+    linear-gradient(158deg, var(--swatch-tint, #c2185b) 0%, var(--swatch, #a01049) 72%);
 }
 
+/* One highlight down the nail bed, brightest near the tip. */
 .swatch::after {
   content: '';
   position: absolute;
-  inset-block: 8%;
-  left: 14%;
-  width: 14%;
+  inset-block: 12% 26%;
+  left: 17%;
+  width: 12%;
   border-radius: 999px;
-  background: linear-gradient(to bottom, rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.05));
+  background: linear-gradient(to bottom, rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.04));
   filter: blur(0.5px);
 }
 
@@ -107,6 +133,27 @@ body {
 
 .swatch-rise {
   animation: swatch-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* The hero photograph has no frame: it fades out across its own left edge into
+   the blush wash, the way the pictures do on the studio's printed banner.
+
+   The fade is LONGER on a phone, and that is the whole trick to having the
+   photograph there at all. On a wide screen the text column and the picture
+   occupy different halves and never meet. On a phone the headline, the hours
+   and "get in touch" all run the full width, straight across the picture — so
+   the mask holds the photograph off until 72% of its own width, leaving the
+   copy on quiet ground and the picture as a band down the right-hand edge. */
+.photo-fade {
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 72%);
+  mask-image: linear-gradient(to right, transparent 0%, #000 72%);
+}
+
+@media (min-width: 1024px) {
+  .photo-fade {
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+    mask-image: linear-gradient(to right, transparent 0%, #000 55%);
+  }
 }
 
 /* Horizontal pickers scroll by swipe; the bar itself is noise on a phone. */

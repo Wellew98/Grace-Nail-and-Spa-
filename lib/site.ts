@@ -30,12 +30,33 @@ export const BUSINESS_SLUG = process.env.NEXT_PUBLIC_BUSINESS_SLUG ?? 'grace-nai
  * table") and asserted specific hygiene practice; both were removed because
  * neither was ours to assert. If the owner confirms details like those, add
  * them — until then, do not.
+ *
+ * HOUSE STYLE: NO EM DASHES IN ANYTHING A VISITOR READS. Not here, not in a
+ * page, not in a button label, not in an email subject. A comma, a colon or a
+ * full stop, every time. This applies to the copy only; the comments in this
+ * codebase are full of them and may stay that way. The assistant is told the
+ * same rule in lib/ai/system-prompt.ts, since it is the one surface that
+ * writes new sentences at runtime.
  * ---------------------------------------------------------------------------
  */
 export const SITE = {
   tagline: 'Nail artistry and spa treatments',
-  /** The promise the whole build is organised around (spec §1). */
-  heroLine: 'Book your treatment in under a minute.',
+  /**
+   * The hero headline is the studio's own shopfront line, finished with ours.
+   *
+   * The banner outside 11 Amanda Avenue says SCHEDULE AN APPOINTMENT in heavy
+   * black caps, with the hours and the phone number under it. That is how this
+   * business already asks for the booking, in its own words, and a customer who
+   * has walked past the shop should recognise the page. `heroPromise` is spec
+   * §1's promise — the part the shopfront cannot offer — and the two are set as
+   * one sentence: "Schedule an appointment in under a minute."
+   */
+  heroLine: 'Schedule an appointment',
+  heroPromise: 'in under a minute.',
+  /** Where the studio is, in the profile's own words. Sits above the headline. */
+  heroPlace: 'Glenanda, Johannesburg',
+  /** The banner's own words for its phone number. */
+  heroContact: 'Get in touch',
   heroSupport:
     'Pick a treatment, pick a time, done. No messaging back and forth, no waiting for someone to reply.',
   about: {
@@ -47,11 +68,29 @@ export const SITE = {
       'Appointments are the length they say they are. The time it takes to turn a room around afterwards is booked separately, behind your appointment, so it never comes out of yours.',
     ],
   },
+  /**
+   * The homepage's review section. The reviews go up as screenshots of Google's
+   * own panel; lib/reviews.ts carries the files and the rules around them,
+   * chiefly that four five-star reviews are never added up into a rating and
+   * that the reader stays one tap from the full listing.
+   *
+   * `note` says the pictures are unretouched, which is the whole claim the
+   * section rests on, and it carries the link that backs the claim up. Say
+   * "screenshots" plainly: a reader who can see they are screenshots and is
+   * told so trusts them more than one left to work it out.
+   */
+  reviews: {
+    heading: 'In their own words',
+    note: 'Screenshots of four reviews on our Google listing, exactly as they appear there.',
+    link: 'Read them all on Google',
+  },
   gallery: {
-    lead: 'A colour for every treatment.',
-    // Deliberately does NOT claim these are the shades on the shelf — they are
-    // this site's way of telling treatments apart, not a stock list.
-    note: 'Each treatment carries its own colour across the site, so you can find what you are after at a glance. The polish range itself is far bigger than any page — come and see it, or ask us for a shade.',
+    lead: 'Our work, and our room.',
+    // The photographs are the studio's own, off its Google Business Profile.
+    // The line says where they came from and nothing about who did the nails:
+    // five of the nine carry the studio's brand card, four are unestablished.
+    // See lib/photos.ts.
+    note: 'Nail work and the studio itself, straight from our Google listing. The polish range is far bigger than any page. Come and see it, or ask us for a shade.',
   },
 } as const;
 
@@ -61,6 +100,13 @@ export const NAV = [
   { href: '/gallery', label: 'Gallery' },
   { href: '/contact', label: 'Contact' },
 ] as const;
+
+/**
+ * Shown at the foot of /privacy. Bump it whenever that page's substance
+ * changes — not for a typo. A notice carrying a date it has outgrown is worse
+ * than one carrying no date, because it invites the reader to trust it.
+ */
+export const PRIVACY_LAST_UPDATED = 'August 2026';
 
 /** 0 = Sunday, matching working_hours.day_of_week. */
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;

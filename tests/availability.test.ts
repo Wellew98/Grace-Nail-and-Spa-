@@ -2,7 +2,15 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { getAvailableSlots } from '@/lib/availability';
 import { createBooking } from '@/lib/booking';
 import { query } from '@/lib/db';
-import { IDS, TZ, at, labels, nextWorkingDate, resetDatabase } from './helpers/fixtures';
+import {
+  IDS,
+  TZ,
+  at,
+  findResourcelessAppointments,
+  labels,
+  nextWorkingDate,
+  resetDatabase,
+} from './helpers/fixtures';
 
 beforeEach(resetDatabase);
 
@@ -317,5 +325,142 @@ describe('§4 grid behaviour', () => {
       date: sunday.toISOString().slice(0, 10),
     });
     expect(slots).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §12.A test 12a — the empty-resource-set trap (§6)
+//
+// v1 of the spec said "a service with no service_resources rows requires no
+// resource; do not treat the empty set as an error." That sentence caused a
+// live bug, because the query that finds resources also filters on `active`,
+// so a service that DOES require a room came back empty once every room was
+// deactivated — read as "needs no resource", and issued slots with
+// resource_id NULL. NULL never conflicts, so one room became bookable without
+// limit.
+//
+// The two empty sets are different things. These tests hold that line at both
+// of the places the logic exists: the availability engine, and the separate
+// copy in the owner/walk-in write path.
+// ---------------------------------------------------------------------------
+describe('§12.A 12a Empty resource set', () => {
+  async function deactivateEveryMassageRoom() {
+    await query('update resources set active = false where id = any($1::uuid[])', [
+      [IDS.resource.massageRoom1, IDS.resource.massageRoom2],
+    ]);
+  }
+
+  it('offers no slots at all when every room a service needs is deactivated', async () => {
+    const date = nextWorkingDate();
+
+    const before = await getAvailableSlots({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      date,
+    });
+    expect(before.length).toBeGreaterThan(0);
+
+    await deactivateEveryMassageRoom();
+
+    const after = await getAvailableSlots({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      date,
+    });
+    expect(after).toHaveLength(0);
+  });
+
+  it('never issues a slot carrying resource_id null for a service that requires one', async () => {
+    const date = nextWorkingDate();
+
+    // With rooms available, every slot must name the room it resolved.
+    const slots = await getAvailableSlots({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      date,
+    });
+    expect(slots.length).toBeGreaterThan(0);
+    expect(slots.every((slot) => slot.resourceId !== null)).toBe(true);
+
+    // And a service with genuinely no service_resources rows still resolves to
+    // null — the case the original rule was actually about.
+    const manicures = await getAvailableSlots({
+      businessId: IDS.business,
+      serviceId: IDS.service.gelManicure,
+      date,
+    });
+    expect(manicures.length).toBeGreaterThan(0);
+    expect(manicures.every((slot) => slot.resourceId === null)).toBe(true);
+  });
+
+  it('refuses the booking rather than writing a resourceless appointment', async () => {
+    const date = nextWorkingDate();
+    await deactivateEveryMassageRoom();
+
+    const result = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      staffId: IDS.staff.sarah,
+      startsAt: at(date, '10:00'),
+      ...customer,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toBe('slot_taken');
+    expect(await findResourcelessAppointments()).toEqual([]);
+  });
+
+  it('refuses an owner walk-in too, which resolves resources on its own path', async () => {
+    const date = nextWorkingDate();
+    await deactivateEveryMassageRoom();
+
+    // resolveSlotForOwner in lib/booking.ts has its own copy of this logic:
+    // the owner is exempt from working hours and notice, never from physics.
+    const result = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      staffId: IDS.staff.sarah,
+      startsAt: at(date, '10:00'),
+      name: 'Counter Client',
+      phone: '082 555 0177',
+      source: 'walkin',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(await findResourcelessAppointments()).toEqual([]);
+  });
+
+  it('keeps the invariant when the rooms go out of service mid-day', async () => {
+    const date = nextWorkingDate();
+
+    // One booking lands while a room is still available.
+    const booked = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      staffId: IDS.staff.sarah,
+      startsAt: at(date, '10:00'),
+      ...customer,
+    });
+    expect(booked.ok).toBe(true);
+    if (!booked.ok) return;
+    expect(booked.appointment.resource_id).not.toBeNull();
+
+    // Then every room is retired. The booking already made keeps its room
+    // (§14: existing appointments are immutable snapshots), and nothing new
+    // may be written without one.
+    await deactivateEveryMassageRoom();
+
+    const next = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.fullBodyMassage,
+      staffId: IDS.staff.nomsa,
+      startsAt: at(date, '12:00'),
+      name: 'Second Client',
+      phone: '082 555 0188',
+    });
+
+    expect(next.ok).toBe(false);
+    expect(await findResourcelessAppointments()).toEqual([]);
   });
 });

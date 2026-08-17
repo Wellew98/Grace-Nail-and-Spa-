@@ -130,8 +130,18 @@ The database already deploys itself (below). This is the web app.
 
 1. **vercel.com → Add New → Project → Import** `Wellew98/Grace-Nail-and-Spa-`.
 2. Framework is detected as Next.js. Leave the build settings alone.
-3. Set **Production Branch** to `claude/project-doc-8cv2my` under
-   *Settings → Git*, or Vercel will look for `main` and find nothing.
+3. Set **Production Branch** to `main` under *Settings → Git*.
+
+   This already points at `main` on the live project, and `main` is what
+   https://grace-nail-and-spa-two.vercel.app serves. It is worth stating plainly
+   because the instruction here used to read `claude/project-doc-8cv2my`, from
+   before `main` existed: **pushing to that branch now deploys nothing.**
+   Verified 14 Aug 2026 by pushing to `main` and watching it reach the live URL.
+
+   Note that GitHub's own **default branch** is a separate setting and is still
+   `claude/project-doc-8cv2my`, so a pull request opened without a base named
+   will target the wrong branch, and a fresh `git clone` checks out the wrong
+   branch. Worth changing to `main` under *GitHub → Settings → General*.
 4. Add these environment variables:
 
 | Variable | Value |
@@ -181,15 +191,25 @@ The example therapists and treatments stay out of `migrations/` on purpose. They
 that aren't yours. `npm run db:migrate --with-sample-data` refuses outright when the
 connection string points at a hosted project.
 
-### ⚠ The production branch is a feature branch
+### ⚠ Check which branch the Supabase integration is pointed at
 
-It is currently set to `claude/project-doc-8cv2my`. That means **every push to that branch
-migrates the production database, with no review step in between.** Normally the production
-branch is `main`, so a pull request is the gate.
+`main` now exists, and Vercel serves it. This section used to say the production branch was
+`claude/project-doc-8cv2my` and to give instructions for creating `main`; `main` was created
+at some point after that and the section was not updated.
 
-To add that gate: create `main` from this branch, push it, and change **Production branch
-name** to `main` in the Supabase integration settings. Migrations then apply on merge rather
-than on every push.
+**The Supabase integration's "Production branch name" is a setting in the Supabase
+dashboard, not in this repository, so it cannot be read from here and has not been
+verified.** Go and look at it, because both possible values are a hazard and they fail in
+opposite directions:
+
+| If it is set to | Then |
+|---|---|
+| `claude/project-doc-8cv2my` (the old value) | **Migrations merged into `main` never reach the production database.** Vercel deploys code that expects the new schema against a database that never got it. This one fails quietly and is the more likely of the two. |
+| `main` | **Every push to `main` migrates the production database with no review step.** Merge is the gate, so open a pull request rather than pushing straight to `main` whenever a migration is in the diff. |
+
+Set it to `main` and use pull requests for anything touching `supabase/migrations/`. Code-only
+changes carry no such risk: a homepage edit with no migration in it cannot alter the database
+whichever way this setting is pointed.
 
 ### After the first deploy
 
@@ -414,4 +434,22 @@ docs/HANDOFF.md       context for continuing in a new session
 ## Not built, by instruction
 
 Payments, deposits, customer accounts, loyalty, analytics, marketing email, multi-tenant
-admin UI, chatbot. Phases 3–5. Spec §0 and §8.
+admin UI. Phases 3–5. Spec §0 and §8.
+
+**The booking assistant is being built** and is no longer a non-goal — v2 §0 has been
+amended. It answers questions about treatments, prices, hours and availability, and it
+**cannot book, cancel or reschedule anything** — there is no write tool of any kind. It is
+an interface to the booking engine and never the authority on a slot: delete `lib/ai` and
+the booking system is exactly what it was.
+
+Configured entirely by environment variables (see `.env.example`). With none of them set,
+no chat button is rendered, no chat JavaScript is shipped, and every other page is
+untouched — verified by loading the site with `GEMINI_API_KEY` removed. `GET /api/health`
+reports whether it is configured, and `?verify=ai` asks the provider whether the key still
+works. Full notes in [`docs/HANDOFF.md`](docs/HANDOFF.md) §13; the spec is
+[`docs/ai-assistant-spec.md`](docs/ai-assistant-spec.md).
+
+**One trap worth knowing:** the chat button's presence is decided when the page is built,
+the chat route reads the environment per request. Add the AI variables to an existing
+deployment without redeploying and the route will work while the button does not appear.
+Set them and redeploy.

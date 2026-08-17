@@ -13,9 +13,27 @@ import type { Business } from '@/lib/types';
 export function SiteFooter({
   business,
   hours,
+  chatWidgetPresent = false,
 }: {
   business: Business;
   hours: { day: number; opens: string; closes: string }[];
+  /**
+   * Whether the floating chat button is on the page.
+   *
+   * REPORTED BUG: "Staff login" could not be tapped. The chat button is
+   * `fixed right-4 bottom-4`, and the last row of the footer is the last thing
+   * on the page — so once you scroll to the bottom, the button parks on top of
+   * it and every tap lands on the button instead. Confirmed with
+   * `elementFromPoint` on the link's own centre at 320, 360, 390 and 1280px.
+   * It was never a phone-only problem; the corner is the corner at every width.
+   *
+   * The fix is to reserve the button's height at the foot of the page rather
+   * than to move the button, which sits where it does on purpose. It is a prop
+   * because the button is not always rendered: with no AI key configured the
+   * layout ships no widget at all, and an empty 5rem strip under the copyright
+   * line of a site that has no chat button is just a gap nobody can explain.
+   */
+  chatWidgetPresent?: boolean;
 }) {
   const byDay = new Map(hours.map((entry) => [entry.day, entry]));
 
@@ -98,10 +116,28 @@ export function SiteFooter({
       </div>
 
       <div className="border-t border-gilt-200/60">
-        <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-5">
+        {/* flex-wrap so the three items drop to a second line rather than
+            colliding at 320px, and the extra bottom padding keeps the last row
+            clear of the chat button. */}
+        <div
+          className={`mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-2 px-5 pt-5 ${
+            chatWidgetPresent ? 'pb-24' : 'pb-5'
+          }`}
+        >
           <p className="text-xs text-mauve-400">
             © {new Date().getFullYear()} {business.name}
           </p>
+          {/*
+            POPIA (§9): the notice has to be reachable from anywhere on the
+            site, not only from the point of collection on /book. Kept out of
+            NAV — it is a legal footer link, not somewhere a customer browses.
+          */}
+          <Link
+            href="/privacy"
+            className="text-xs text-mauve-400 underline-offset-4 hover:text-aubergine-900 hover:underline"
+          >
+            Privacy
+          </Link>
           {/*
             The only way in to the diary. The admin is deliberately not in the
             main navigation — customers have no use for it — but with no link

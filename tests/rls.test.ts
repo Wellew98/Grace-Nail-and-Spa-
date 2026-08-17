@@ -93,6 +93,29 @@ describe('§9.8 RLS — the anon key', () => {
     await expect(asAnon((c) => c.query('select * from availability_blocks'))).rejects.toThrow(/permission denied/i);
   });
 
+  /**
+   * Vouchers build spec §6.2 / §8 test 8: "a voucher row is money, and a
+   * readable table is a readable list of live codes." Same class as the
+   * appointments/customers assertions above, on the two tables 0008 adds.
+   */
+  it('cannot read vouchers or voucher_transactions', async () => {
+    const issued = await query<{ id: string }>(
+      `insert into vouchers (business_id, code, code_lookup, lookup_token, initial_cents, balance_cents)
+            values ($1, '4K2-P9X', '4K2P9X', 'test-lookup-token', 50000, 50000)
+       returning id`,
+      [IDS.business],
+    );
+    await query(
+      `insert into voucher_transactions (voucher_id, kind, amount_cents) values ($1, 'issue', 50000)`,
+      [issued[0].id],
+    );
+
+    await expect(asAnon((c) => c.query('select * from vouchers'))).rejects.toThrow(/permission denied/i);
+    await expect(asAnon((c) => c.query('select * from voucher_transactions'))).rejects.toThrow(
+      /permission denied/i,
+    );
+  });
+
   it('CAN read the public catalogue it needs to render the site', async () => {
     const result = await asAnon(async (c) => ({
       businesses: await c.query('select * from businesses'),

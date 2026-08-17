@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createWalkInAction } from '@/app/admin/actions';
+import { VoucherRedeem } from '@/components/admin/voucher-redeem';
 import { formatDuration, formatZar } from '@/lib/money';
 import type { ClashSummary } from '@/lib/booking';
 
@@ -44,6 +45,7 @@ export function WalkInForm({
     message: string;
     clashesWith?: ClashSummary[];
   } | null>(null);
+  const [justBooked, setJustBooked] = useState<{ appointmentId: string; priceCents: number } | null>(null);
 
   const service = useMemo(() => services.find((s) => s.id === serviceId), [services, serviceId]);
   const eligibleStaff = useMemo(
@@ -74,6 +76,9 @@ export function WalkInForm({
         setPhone('');
         setNotes('');
         setTime('');
+        setJustBooked(
+          response.appointmentId ? { appointmentId: response.appointmentId, priceCents: response.priceCents ?? 0 } : null,
+        );
         router.refresh();
       }
     });
@@ -139,13 +144,23 @@ export function WalkInForm({
               <ul className="mt-2 space-y-1 text-xs">
                 {result.clashesWith.map((clash) => (
                   <li key={clash.appointment_id}>
-                    Clashes with {clash.customer_name} — {clash.service_name}, {clash.staff_name}
+                    Clashes with {clash.customer_name}: {clash.service_name}, {clash.staff_name}
                     {clash.reason === 'resource' && clash.resource_name && ` (${clash.resource_name})`}
                   </li>
                 ))}
               </ul>
             )}
           </div>
+        )}
+
+        {/* §4: "add it to the walk-in form, where a voucher is at least as
+            likely." Shown against the booking that was just created. */}
+        {justBooked && (
+          <VoucherRedeem
+            appointmentId={justBooked.appointmentId}
+            priceCents={justBooked.priceCents}
+            onRedeemed={() => setJustBooked(null)}
+          />
         )}
 
         <button

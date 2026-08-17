@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import {
   isExclusionViolation,
   isUniqueViolation,
+  lockBusinessForWrite,
   violatedConstraint,
   withTransaction,
   query,
@@ -11,7 +12,8 @@ import {
 import { getAvailableSlots, getBusiness, getService, resolveSlot } from './availability';
 import { normalisePhone } from './phone';
 import { addMinutes, utcToZonedDate } from './time';
-import type { Appointment, BookingSource, Queryable, Slot } from './types';
+import { eraseVoucherPersonalData, refundVoucherRedemptionsForAppointment } from './vouchers';
+import type { Appointment, BookingSource, Customer, Queryable, Slot } from './types';
 
 /** Spec §5 step 6: crypto random, 32 bytes, url-safe. */
 function generateManageToken(): string {
@@ -108,38 +110,6 @@ class SlotUnavailable extends Error {
     super('slot_unavailable');
     this.name = 'SlotUnavailable';
   }
-}
-
-/**
- * Serialise appointment writes for one business, for the life of the
- * transaction. MUST be the first statement after BEGIN.
- *
- * ---------------------------------------------------------------------------
- * WHY: `appointments` carries two exclusion constraints. Two concurrent
- * inserts can each pass one constraint and then block on the other's
- * uncommitted index entry, in opposite orders — a genuine deadlock, even
- * though neither row is invalid. Postgres resolves it, but only after waiting
- * a full `deadlock_timeout` (1s by default) before it even looks for a cycle.
- * Under real contention those one-second penalties compound badly: a burst of
- * twenty racers on one slot took over a minute, versus a few milliseconds
- * uncontended.
- *
- * Taking a single lock per business up front gives every writer the same
- * ordering, so the cycle cannot form and nobody pays the deadlock timeout.
- * The lock is released automatically on commit or rollback.
- *
- * WHAT THIS IS NOT: it is not the thing that prevents double booking. The
- * exclusion constraints still are, and they still reject overlaps if this lock
- * were removed tomorrow. This only removes lock-order nondeterminism.
- *
- * COST: appointment inserts for one business serialise. The insert is
- * sub-millisecond and this is a single-salon product, so the ceiling is orders
- * of magnitude above real demand. Determinism is worth far more here than
- * theoretical write throughput.
- * ---------------------------------------------------------------------------
- */
-async function lockBusinessForWrite(client: Queryable, businessId: string): Promise<void> {
-  await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [businessId]);
 }
 
 /**
@@ -369,7 +339,7 @@ export async function createBooking(input: CreateBookingInput): Promise<BookingR
               blocksUntil: addMinutes(startsAt, occupancyMinutes),
             })
           : [],
-        message: 'Sorry — that time was taken while you were booking. Here are the times still open.',
+        message: 'Sorry, that time was taken while you were booking. Here are the times still open.',
       };
     }
 
@@ -439,6 +409,8 @@ export async function cancelBooking(options: {
   }
 
   const updated = await withTransaction(async (client) => {
+    await lockBusinessForWrite(client, appointment.business_id);
+
     const rows = await client.query(
       `update appointments
           set status = 'cancelled', cancelled_at = now()
@@ -454,6 +426,12 @@ export async function cancelBooking(options: {
             values ($1, 'cancelled', $2, $3)`,
       [appointmentId, actor, JSON.stringify({ reason })],
     );
+
+    // Vouchers build spec §3: "the redemption is refunded, not deleted."
+    // Already inside the transaction that holds the business lock, so this is
+    // just another write on the same queue — no new locking.
+    await refundVoucherRedemptionsForAppointment(client, appointmentId, actor);
+
     return rows.rows[0] as unknown as Appointment;
   });
 
@@ -628,6 +606,173 @@ export async function rescheduleBooking(options: {
     }
     throw error;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Erasure — spec §9.4
+// ---------------------------------------------------------------------------
+
+/**
+ * Marks an anonymised `customers` row.
+ *
+ * It goes in `phone` because that column is `not null` and carries
+ * `unique (business_id, phone)`, so the placeholder has to be both present and
+ * unique — the customer id supplies the uniqueness. A real number is E.164 and
+ * always starts `+`, so a leading letter cannot collide with one.
+ *
+ * Consequence worth knowing: the same person booking again later comes back
+ * through the `(business_id, phone)` upsert as a NEW customer row, with no link
+ * to the erased one. That is the point.
+ */
+export const ERASED_PHONE_PREFIX = 'erased:';
+export const ERASED_NAME = 'Deleted customer';
+
+export function isErased(customer: { phone: string }): boolean {
+  return customer.phone.startsWith(ERASED_PHONE_PREFIX);
+}
+
+export type ForgetResult =
+  | { ok: true; cancelled: AppointmentDetail[]; alreadyErased: boolean }
+  | { ok: false; error: 'not_found'; message: string };
+
+/**
+ * "Delete my details" — spec §9.4.
+ *
+ * ANONYMISE, NEVER DELETE. `appointments.customer_id` is `not null` and the
+ * foreign keys are NO ACTION on purpose (§14), so a real DELETE either fails
+ * loudly or, if the constraint were softened, tears a hole in the diary. The
+ * studio's record of work done is not the customer's to erase; her name on it
+ * is. So the row survives and is emptied of the person.
+ *
+ * Three things happen together, and all three are required:
+ *
+ *  1. Future bookings are cancelled. Erasing the phone number makes an upcoming
+ *     appointment un-keepable — nobody could be told if the therapist were off
+ *     sick — so leaving it on the diary would strand both sides. The owner is
+ *     emailed about each one by the caller, after this commits.
+ *  2. The identifying columns are overwritten, including free-text notes on
+ *     both the customer and her appointments. Notes are where personal detail
+ *     accumulates, and a deletion that leaves "phone her sister on 082…"
+ *     behind has not deleted anything.
+ *  3. Every manage token of hers is rotated, which kills the links already
+ *     sitting in her inbox. Without this the record stays reachable by anyone
+ *     holding an old link, and "erased" would not be true.
+ *  4. Any chat transcript that produced a booking of hers is DELETED outright,
+ *     not anonymised. The reasoning in (1) does not apply to it: the studio has
+ *     no record-of-work interest in a conversation, and a transcript is exactly
+ *     the free text point (2) is about — it is where someone types "I'm the one
+ *     with the sensitive skin, my sister booked last week". Anonymising it
+ *     would leave every one of those words behind attached to nobody, which is
+ *     not erasure. Conversations that never booked have no customer to link to
+ *     and are unreachable here; they age out on their own within 30 days.
+ *
+ * Idempotent: running it twice is harmless and reports `alreadyErased`.
+ */
+export async function forgetCustomer(options: {
+  customerId: string;
+  actor?: 'customer' | 'admin';
+  now?: Date;
+}): Promise<ForgetResult> {
+  const { customerId, actor = 'customer', now = new Date() } = options;
+
+  const customer = await queryOne<Customer>('select * from customers where id = $1', [customerId]);
+  if (!customer) {
+    return { ok: false, error: 'not_found', message: 'Those details could not be found.' };
+  }
+  if (isErased(customer)) {
+    return { ok: true, cancelled: [], alreadyErased: true };
+  }
+
+  // Captured BEFORE the wipe: the owner's cancellation notice needs to say who
+  // and what, and a moment later that is gone. Sent by the caller after commit.
+  const upcoming = await query<AppointmentDetail>(
+    `${DETAIL_SELECT}
+      where a.customer_id = $1
+        and a.status in ('pending','confirmed')
+        and a.starts_at >= $2
+      order by a.starts_at`,
+    [customerId, now.toISOString()],
+  );
+
+  await withTransaction(async (client) => {
+    // Serialise against in-flight bookings for this business, so a booking that
+    // is mid-flight cannot attach a fresh appointment to a row we are about to
+    // empty and leave the owner an uncontactable customer.
+    await lockBusinessForWrite(client, customer.business_id);
+
+    for (const appointment of upcoming) {
+      await client.query(
+        `update appointments
+            set status = 'cancelled', cancelled_at = now()
+          where id = $1
+            and status in ('pending','confirmed')`,
+        [appointment.id],
+      );
+      await client.query(
+        `insert into appointment_events (appointment_id, event, actor, detail)
+              values ($1, 'cancelled', $2, $3)`,
+        [appointment.id, actor, JSON.stringify({ reason: 'customer_erased' })],
+      );
+      // Same reasoning as an ordinary cancellation (vouchers spec §3): an
+      // appointment paid down with a voucher still owes the money back when
+      // erasure cancels it out from under the voucher, not just when the
+      // customer or the owner cancels it directly.
+      await refundVoucherRedemptionsForAppointment(client, appointment.id, actor);
+    }
+
+    // Vouchers spec §7: her purchaser/recipient details are personal
+    // information too, and are a place it lives that HANDOFF §11's erasure
+    // path did not know about until now. Match on the details captured
+    // BEFORE the wipe below — the same reason `upcoming` was read before the
+    // transaction started. Ledger and balance are untouched; only who the
+    // voucher names is cleared, exactly as the customer row itself is
+    // emptied rather than deleted.
+    await eraseVoucherPersonalData(client, {
+      businessId: customer.business_id,
+      phone: customer.phone,
+      email: customer.email,
+    });
+
+    // Rotate every manage token, past and future, so old links stop resolving.
+    // Generated per row in application code because manage_token is unique.
+    const tokened = await client.query('select id from appointments where customer_id = $1', [
+      customerId,
+    ]);
+    for (const row of tokened.rows) {
+      await client.query('update appointments set manage_token = $2, notes = null where id = $1', [
+        row.id,
+        generateManageToken(),
+      ]);
+    }
+
+    await client.query(
+      `update customers
+          set name  = $2,
+              phone = $3,
+              email = null,
+              notes = null
+        where id = $1`,
+      [customerId, ERASED_NAME, `${ERASED_PHONE_PREFIX}${customerId}`],
+    );
+
+    // Chat transcripts of hers, gone. In the SAME transaction as the wipe, so
+    // there is no window in which the customers row is empty and the
+    // conversation that names her is still readable in Admin.
+    await client.query('delete from ai_conversations where customer_id = $1', [customerId]);
+
+    // Audit that it happened, against every appointment it touched. The event
+    // records the act, deliberately not the person — a log of who asked to be
+    // forgotten, keyed to their name, would defeat the request.
+    for (const row of tokened.rows) {
+      await client.query(
+        `insert into appointment_events (appointment_id, event, actor, detail)
+              values ($1, 'customer_erased', $2, $3)`,
+        [row.id, actor, JSON.stringify({ cancelled_upcoming: upcoming.length })],
+      );
+    }
+  });
+
+  return { ok: true, cancelled: upcoming, alreadyErased: false };
 }
 
 // ---------------------------------------------------------------------------

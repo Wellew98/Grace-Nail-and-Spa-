@@ -63,6 +63,7 @@ export default async function BookPage({
       days={days}
       preselectedServiceId={params.service ?? null}
       minNoticeMinutes={business.min_notice_minutes}
+      businessName={business.name}
       businessPhone={business.phone}
     />
   );

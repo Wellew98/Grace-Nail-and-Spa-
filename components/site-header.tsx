@@ -3,24 +3,47 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { GraceMark } from '@/components/grace-mark';
 import { NAV } from '@/lib/site';
 
 export function SiteHeader({ businessName }: { businessName: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  /**
+   * The homepage carries the mark itself, at full size, about sixty pixels
+   * below this bar. Two of the same logo that close together is one too many,
+   * so the header hands the job to the hero and shows nothing on the left.
+   *
+   * Everywhere ELSE the mark stays: it is the only branding on those pages and
+   * the only way back to the homepage from them. On the homepage there is
+   * nothing to link back to, so nothing is lost by dropping it there.
+   *
+   * The business name used to sit beside it in text. It has gone because the
+   * mark already reads "GRACE / NAILS & BEAUTY SPA" — the name was printed
+   * twice, side by side. Nothing about §8 is weakened: the NAP block in the
+   * footer is on every page and is what search engines read.
+   */
+  const isHome = pathname === '/';
+
   return (
     <header className="sticky top-0 z-50 border-b border-gilt-200/60 bg-blush-50/90 backdrop-blur-sm">
       <div className="mx-auto flex max-w-5xl items-center gap-4 px-5 py-3.5">
-        {/* Sized to keep "Grace Nails and Beauty Spa" on one line at 390px —
-            wrapping it made the sticky header noticeably taller on a phone. */}
-        <Link
-          href="/"
-          className="font-display text-[0.95rem] leading-tight font-semibold tracking-tight text-aubergine-900 sm:text-lg sm:leading-none"
-          onClick={() => setOpen(false)}
-        >
-          {businessName}
-        </Link>
+        {!isHome && (
+          <Link
+            href="/"
+            className="flex items-center text-aubergine-900"
+            onClick={() => setOpen(false)}
+          >
+            {/* Titled, not decorative: with the name gone this is the link's
+                only accessible name. */}
+            <GraceMark
+              variant="compact"
+              title={businessName}
+              className="h-9 w-9 shrink-0 sm:h-10 sm:w-10"
+            />
+          </Link>
+        )}
 
         <nav aria-label="Main" className="ml-auto hidden items-center gap-7 sm:flex">
           {NAV.map((item) => (

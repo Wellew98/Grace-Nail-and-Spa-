@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
-import { Fraunces, IBM_Plex_Mono, Karla } from 'next/font/google';
+import { Fraunces, Great_Vibes, IBM_Plex_Mono, Karla } from 'next/font/google';
 import { SiteHeader } from '@/components/site-header';
 import { SiteFooter } from '@/components/site-footer';
 import { LocalBusinessJsonLd } from '@/components/local-business-jsonld';
-import { DemoBanner } from '@/components/demo-banner';
-import { getActiveServices, getBusiness, getOpeningHours, hasDemoData } from '@/lib/public-data';
+import { ChatWidget } from '@/components/ai/chat-widget';
+import { limitsFrom } from '@/lib/ai/orchestrator';
+import { providerConfigProblem } from '@/lib/ai/provider';
+import { getActiveServices, getBusiness, getOpeningHours } from '@/lib/public-data';
 import { SITE } from '@/lib/site';
 import './globals.css';
 
@@ -24,6 +26,17 @@ const fraunces = Fraunces({
 });
 
 const karla = Karla({ subsets: ['latin'], variable: '--font-karla', display: 'swap' });
+
+/* Great Vibes exists for exactly one string: the script "Grace" written across
+   the logo mark. The studio's banner sets its name in a formal copperplate
+   script, and a mark drawn in the site's own serif instead would be a different
+   business's logo. Loaded once, used once — see components/grace-mark.tsx. */
+const greatVibes = Great_Vibes({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-great-vibes',
+  display: 'swap',
+});
 
 const plexMono = IBM_Plex_Mono({
   subsets: ['latin'],
@@ -55,7 +68,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     metadataBase: new URL(SITE_URL),
-    title: { default: `${name} — ${SITE.tagline}`, template: `%s — ${name}` },
+    title: { default: `${name} · ${SITE.tagline}`, template: `%s · ${name}` },
     description: SITE.heroSupport,
     openGraph: { title: name, description: SITE.heroSupport, type: 'website', locale: 'en_ZA' },
     robots: { index: true, follow: true },
@@ -81,14 +94,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     );
   }
 
-  const [services, hours, showingDemoData] = await Promise.all([
+  const [services, hours] = await Promise.all([
     getActiveServices(business.id),
     getOpeningHours(business.id),
-    hasDemoData(business.id),
   ]);
 
+  /**
+   * The assistant is an enhancement; the booking system is the product.
+   *
+   * Decided here, on the server, so a deployment with no AI key ships no chat
+   * button and no chat JavaScript rather than a button that apologises — and
+   * nothing outside lib/ai, components/ai and the chat route ever reads an AI
+   * environment variable. Removing GEMINI_API_KEY leaves this page with
+   * nothing that could fail.
+   */
+  const assistantAvailable = providerConfigProblem() === null;
+
   return (
-    <html lang="en-ZA" className={`${fraunces.variable} ${karla.variable} ${plexMono.variable}`}>
+    <html
+      lang="en-ZA"
+      className={`${fraunces.variable} ${karla.variable} ${plexMono.variable} ${greatVibes.variable}`}
+    >
       <body className="flex min-h-screen flex-col">
         <a
           href="#main"
@@ -96,12 +122,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           Skip to content
         </a>
-        {showingDemoData && <DemoBanner />}
         <SiteHeader businessName={business.name} />
         <main id="main" className="flex-1">
           {children}
         </main>
-        <SiteFooter business={business} hours={hours} />
+        <SiteFooter business={business} hours={hours} chatWidgetPresent={assistantAvailable} />
+        {assistantAvailable && (
+          <ChatWidget
+            businessName={business.name}
+            maxMessageLength={limitsFrom().maxMessageLength}
+          />
+        )}
         <LocalBusinessJsonLd
           business={business}
           services={services}
