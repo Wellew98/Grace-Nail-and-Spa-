@@ -1,10 +1,15 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { headers } from 'next/headers';
 import { BookButton } from '@/components/book-button';
 import { Swatch } from '@/components/swatch';
 import { getBusiness } from '@/lib/public-data';
 import { DESTINATION_LACQUERS } from '@/lib/palette';
 import { formatPhoneForDisplay, whatsappLink } from '@/lib/phone';
+import { formatZar } from '@/lib/money';
+import { formatDateLabel } from '@/lib/time';
+import { getVoucherByCode, type VoucherWithLedger } from '@/lib/vouchers';
+import { consumeVoucherCodeLookup, voucherLookupIp } from '@/lib/voucher-rate-limit';
 
 export const metadata: Metadata = {
   title: 'Gift Vouchers',
@@ -13,23 +18,42 @@ export const metadata: Metadata = {
 };
 
 /**
+ * The "check by code" box below reads request-specific state (the submitted
+ * code, the caller's IP for rate limiting) on every load, so this page can
+ * never be the revalidate=300 static render the rest of the marketing site
+ * gets from app/layout.tsx — same reasoning as /book and /v/[token].
+ */
+export const dynamic = 'force-dynamic';
+
+/**
  * The customer-facing half of spa-voucher-build-spec.md. Everything the
  * ADMIN side already does (issue, redeem, adjust, resend) had a screen —
  * `/v/[token]` even had a page. What had no door in from the site was the
  * question a customer actually shows up asking: "where do I check this."
  *
- * This page is that door, plus enough about the offering that landing here
- * cold still makes sense. It deliberately does NOT add a "type your code"
- * lookup form: `lib/vouchers.ts` §2.1/§6.2 draws a hard line between the
- * short code (spoken at the counter, business-scoped lookup only) and the
- * long `lookup_token` (the one thing that is safe to resolve on a public
- * route). A public form that accepted the six-character code would be
- * exactly the fallback that comment forbids — it would make the code
- * brute-forceable. The two real paths in, the emailed link and a call to the
- * studio, are both already safe, so this page points at those instead.
+ * This page is that door: what a voucher is, how to buy one, and a
+ * "check by code" box that answers the balance question on the spot.
+ *
+ * THE CODE BOX IS A DELIBERATE, NARROWER EXCEPTION TO §6.2. `lib/vouchers.ts`
+ * is explicit that the short code must never resolve on a public route —
+ * that rule protects `/v/[token]` (256 bits of entropy, meant to stay that
+ * strong) and it still does; nothing here touches `getVoucherByLookupToken`
+ * or that route. What changed is a second, separate, and much more tightly
+ * rate-limited door, added because a business owner explicitly asked for the
+ * standard gift-card "type your code, see your balance" convenience and
+ * accepted the tradeoff: see `consumeVoucherCodeLookup` in
+ * lib/voucher-rate-limit.ts for the limit and the reasoning behind it.
  */
-export default async function VouchersPage() {
+export default async function VouchersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ code?: string }>;
+}) {
   const business = (await getBusiness())!;
+  const tz = business.timezone ?? 'Africa/Johannesburg';
+
+  const submittedCode = (await searchParams).code?.trim() || null;
+  const lookup = submittedCode ? await lookupByCode(business.id, submittedCode) : null;
 
   const facts = [
     {
@@ -59,7 +83,7 @@ export default async function VouchersPage() {
       <p className="mt-5 max-w-lg text-[1.05rem] leading-relaxed text-mauve-500">
         A voucher from {business.name} works like cash in the studio: any amount, good for years,
         and yours to give to anyone. It is bought and redeemed in person, never online, and the
-        balance is always one call or one link away.
+        balance is always a few seconds away, no account needed.
       </p>
 
       <div className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-4">
@@ -109,26 +133,29 @@ export default async function VouchersPage() {
       {/* ---------------- check your balance ----------------
           The section this whole page exists for. `scroll-mt-24` keeps the
           heading clear of the sticky header when the "↓" link above jumps
-          here.
+          here, and is also where a submitted form lands, via the plain
+          `<form method="get" action="/vouchers#balance">` below — no client
+          JavaScript, the same GET-and-rerender shape /book already uses for
+          `?service=`.
 
-          The mock card is decorative, not another lookup path: it shows a
-          customer what to look for on the physical card she is already
-          holding (spa-voucher-build-spec.md §2 — code left, `4K2-P9X` shape,
-          written by hand at issue) so the two real routes below read as
-          "here is the code" / "here is what to do with it" rather than
-          arriving with no context. */}
+          The card is the form. It used to be a decorative mock-up showing
+          what to look for on the physical card (spa-voucher-build-spec.md
+          §2 — code left, `4K2-P9X` shape, written by hand at issue); now the
+          code line IS the input, styled the same way, so typing into it
+          reads as "filling in the card" rather than a generic search box. */}
       <section id="balance" aria-labelledby="balance-heading" className="mt-20 scroll-mt-24">
         <h2 id="balance-heading" className="text-xs tracking-[0.18em] text-gilt-600 uppercase">
           Already holding a voucher?
         </h2>
         <p className="mt-4 max-w-lg text-[1.05rem] leading-relaxed text-mauve-500">
-          There is no account, no password and nothing to set up. Whichever of these you have is
-          enough on its own.
+          Type the code from your card below and we will show you the balance right away. No
+          account, no password, nothing to set up.
         </p>
 
-        <div className="mt-8 flex flex-col items-center gap-8 sm:flex-row sm:items-stretch">
-          <div
-            aria-hidden="true"
+        <div className="mt-8 flex flex-col items-start gap-8 sm:flex-row">
+          <form
+            action="/vouchers#balance"
+            method="GET"
             className="flex w-full max-w-[15rem] shrink-0 flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-gilt-200 bg-white px-6 py-7 text-center"
           >
             <Swatch serviceName="voucher" size="tile" lacquer={DESTINATION_LACQUERS.treatments} />
@@ -136,46 +163,71 @@ export default async function VouchersPage() {
               {business.name}
             </p>
             <p className="font-display text-sm font-semibold text-aubergine-900">Gift voucher</p>
-            <p className="font-mono text-xl tracking-[0.15em] text-mauve-400">4K2-P9X</p>
+            <label htmlFor="voucher-code" className="sr-only">
+              Voucher code
+            </label>
+            <input
+              id="voucher-code"
+              name="code"
+              type="text"
+              inputMode="text"
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={8}
+              placeholder="4K2-P9X"
+              defaultValue={submittedCode ?? ''}
+              className="w-full rounded-lg border border-blush-300 bg-white px-2 py-2 text-center font-mono text-xl uppercase tracking-[0.15em] text-aubergine-900 placeholder:text-mauve-300 focus:border-aubergine-900 focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="w-full rounded-full bg-lacquer-500 px-4 py-2.5 text-sm font-medium text-blush-50 transition-colors hover:bg-lacquer-600"
+            >
+              Check balance
+            </button>
             <p className="text-[0.7rem] leading-snug text-mauve-400">
               The six characters written on yours
             </p>
-          </div>
+          </form>
 
-          <div className="grid flex-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-blush-200 bg-blush-100 px-6 py-6">
-              <h3 className="font-display text-lg font-semibold text-aubergine-900">
-                Emailed a link?
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-mauve-600">
-                The voucher email has a &ldquo;Check the balance&rdquo; link. Open it any time to see the
-                balance, the expiry date and everywhere it has been used, no login needed.
-              </p>
-            </div>
+          <div className="grid flex-1 gap-4">
+            {lookup && <LookupResultCard result={lookup} tz={tz} />}
 
-            <div className="rounded-2xl border border-blush-200 bg-blush-100 px-6 py-6">
-              <h3 className="font-display text-lg font-semibold text-aubergine-900">
-                Only have the card?
-              </h3>
-              <p className="mt-2 text-sm leading-relaxed text-mauve-600">
-                Call or WhatsApp us with the code on it and we will read the balance back to you,
-                or send the link to your email while we are on the phone.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                <a
-                  href={`tel:${business.phone}`}
-                  className="text-lacquer-500 underline underline-offset-4 hover:text-lacquer-600"
-                >
-                  {formatPhoneForDisplay(business.phone)}
-                </a>
-                {business.whatsapp && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-blush-200 bg-blush-100 px-6 py-6">
+                <h3 className="font-display text-lg font-semibold text-aubergine-900">
+                  Emailed a link?
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-mauve-600">
+                  The voucher email has a &ldquo;Check the balance&rdquo; link too. Open it any time to see
+                  the balance, the expiry date and everywhere it has been used, no login needed.
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-blush-200 bg-blush-100 px-6 py-6">
+                <h3 className="font-display text-lg font-semibold text-aubergine-900">
+                  Rather ask a person?
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-mauve-600">
+                  Call or WhatsApp us with the code on it and we will read the balance back to
+                  you, or send the link to your email while we are on the phone.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                   <a
-                    href={whatsappLink(business.whatsapp, 'Hi, I’d like to check my voucher balance.')}
+                    href={`tel:${business.phone}`}
                     className="text-lacquer-500 underline underline-offset-4 hover:text-lacquer-600"
                   >
-                    WhatsApp
+                    {formatPhoneForDisplay(business.phone)}
                   </a>
-                )}
+                  {business.whatsapp && (
+                    <a
+                      href={whatsappLink(business.whatsapp, 'Hi, I’d like to check my voucher balance.')}
+                      className="text-lacquer-500 underline underline-offset-4 hover:text-lacquer-600"
+                    >
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -193,4 +245,76 @@ export default async function VouchersPage() {
       </div>
     </div>
   );
+}
+
+type LookupResult = { found: true; voucher: VoucherWithLedger } | { found: false };
+
+/**
+ * Rate limit first, lookup second — same order as `/v/[token]`, and for the
+ * same reason: a limited request must cost nothing extra and must not be
+ * distinguishable from a wrong code. Both `not found` and `rate limited`
+ * collapse to the same `{ found: false }`, rendered as one generic sentence
+ * below, so there is no observable difference between "no such voucher" and
+ * "you have asked too many times".
+ */
+async function lookupByCode(businessId: string, code: string): Promise<LookupResult> {
+  const ip = voucherLookupIp(await headers());
+  const allowed = await consumeVoucherCodeLookup(ip);
+  if (!allowed) return { found: false };
+
+  const voucher = await getVoucherByCode(businessId, code);
+  return voucher ? { found: true, voucher } : { found: false };
+}
+
+/**
+ * Deliberately leaner than `/v/[token]`'s balance page: balance, expiry, and
+ * status, no purchaser fields (never shown publicly, see spec §6.2) and no
+ * per-visit history. The full ledger and the voucher's `lookup_token` stay
+ * behind the emailed link and nowhere else — see the file header on why the
+ * code box is safe to add without widening what it can hand back.
+ */
+function LookupResultCard({ result, tz }: { result: LookupResult; tz: string }) {
+  if (!result.found) {
+    return (
+      <div className="rounded-2xl border border-blush-200 bg-white px-6 py-6 text-center">
+        <p className="text-sm text-mauve-600">
+          No voucher found with that code. Double check it, or call or WhatsApp us using the
+          details below and we will look it up.
+        </p>
+      </div>
+    );
+  }
+
+  const { voucher } = result;
+
+  if (voucher.status === 'void') {
+    return (
+      <div className="rounded-2xl border border-blush-200 bg-white px-6 py-6 text-center">
+        <p className="text-sm text-mauve-600">This voucher has been voided.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-blush-200 bg-white px-6 py-6 text-center">
+      <p className="tabular font-display text-4xl font-semibold text-aubergine-900">
+        {formatZar(voucher.balance_cents)}
+      </p>
+      <p className="mt-1 text-sm text-mauve-500">of {formatZar(voucher.initial_cents)} issued</p>
+      {voucher.expired ? (
+        <p className="mt-3 text-sm text-lacquer-600">
+          This voucher expired on {formatDateLabel(dateOnly(voucher.expires_at!), tz)}.
+        </p>
+      ) : (
+        <p className="mt-3 text-xs text-mauve-400">
+          {voucher.expires_at ? `Expires ${formatDateLabel(dateOnly(voucher.expires_at), tz)}` : 'Never expires'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** formatDateLabel wants a calendar date; these columns are timestamptz. */
+function dateOnly(instant: Date): string {
+  return new Date(instant).toISOString().slice(0, 10);
 }

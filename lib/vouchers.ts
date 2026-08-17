@@ -650,7 +650,12 @@ async function attachLedger(voucher: Voucher): Promise<VoucherWithLedger> {
 }
 
 /**
- * Business-scoped lookup by the SHORT code, for the owner's counter flow.
+ * Business-scoped lookup by the SHORT code. Originally the owner's counter
+ * flow only; also the "check by code" box on the public `/vouchers` page,
+ * where it is a deliberate, narrower exception to §6.2's rule about the code
+ * — see the long comment on `consumeVoucherCodeLookup` in
+ * lib/voucher-rate-limit.ts for why that is safe enough to add, and gate
+ * every public caller through that limiter, not just this admin one.
  * Acceptance test 7: a code belonging to another business returns null here,
  * never another salon's voucher.
  */
