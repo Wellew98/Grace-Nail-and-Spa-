@@ -138,12 +138,20 @@ export default async function VoucherPage({ params }: { params: Promise<{ token:
         </div>
       )}
 
-      <Link
-        href="/book"
-        className="mt-8 inline-block rounded-full bg-lacquer-500 px-6 py-3 text-sm font-medium text-blush-50 hover:bg-lacquer-600"
-      >
-        Book a treatment
-      </Link>
+      <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+        <Link
+          href="/book"
+          className="inline-block rounded-full bg-lacquer-500 px-6 py-3 text-sm font-medium text-blush-50 hover:bg-lacquer-600"
+        >
+          Book a treatment
+        </Link>
+        <Link
+          href="/vouchers"
+          className="text-sm text-lacquer-500 underline underline-offset-4 hover:text-lacquer-600"
+        >
+          Give someone else a voucher
+        </Link>
+      </div>
     </div>
   );
 }

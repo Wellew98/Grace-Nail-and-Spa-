@@ -96,6 +96,7 @@ export const SITE = {
 
 export const NAV = [
   { href: '/services', label: 'Treatments' },
+  { href: '/vouchers', label: 'Vouchers' },
   { href: '/about', label: 'About' },
   { href: '/gallery', label: 'Gallery' },
   { href: '/contact', label: 'Contact' },
