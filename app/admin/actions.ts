@@ -83,6 +83,31 @@ function refreshAdmin() {
   revalidatePath('/admin/vouchers');
 }
 
+/**
+ * Bust the PUBLIC site's cache, not just the admin's.
+ *
+ * app/layout.tsx sets `revalidate = 300` for the whole marketing site, and
+ * nothing in here was ever telling Next.js that a Setup edit makes that cache
+ * stale. The owner renames a therapist, /admin/settings shows it immediately
+ * because `refreshAdmin()` revalidates that path directly — but the PUBLIC
+ * About page, the footer's opening hours and the service list all kept
+ * serving the pre-edit render, for up to five minutes and possibly much
+ * longer: ISR only regenerates on the next request after the window expires,
+ * not on a timer, so a quiet page can stay stale indefinitely.
+ *
+ * `'/', 'layout'` busts the ROOT layout rather than one page at a time. That
+ * matters here specifically because the footer's opening hours
+ * (`getOpeningHours`, the union of every active therapist's working hours)
+ * and the JSON-LD render from the root layout and therefore appear on EVERY
+ * route — enumerating just '/about' or '/services' would miss them, and
+ * would miss the next page that reads staff or service data too. Call this
+ * alongside `refreshAdmin()`, never instead of it: this does not touch the
+ * admin's own cache.
+ */
+function refreshPublicSite() {
+  revalidatePath('/', 'layout');
+}
+
 // ---------------------------------------------------------------- Today screen
 
 /** One-tap completed / no_show from the Today screen (§7). */
@@ -285,6 +310,7 @@ export async function updateServiceAction(
   }
 
   refreshAdmin();
+  refreshPublicSite();
   return { ok: true, message: 'Saved. Bookings already on the diary are unchanged.' };
 }
 
@@ -292,6 +318,7 @@ export async function deactivateServiceAction(serviceId: string): Promise<Action
   await requireOwner();
   const result = await deactivateService(serviceId);
   refreshAdmin();
+  refreshPublicSite();
 
   if (!result.ok) return { ok: false, message: result.message };
   const count = result.warnings.length;
@@ -309,6 +336,7 @@ export async function deactivateStaffAction(staffId: string): Promise<ActionResu
   await requireOwner();
   const result = await deactivateStaff(staffId);
   refreshAdmin();
+  refreshPublicSite();
   return result.ok
     ? { ok: true, message: 'Therapist made inactive.' }
     : { ok: false, message: result.message, conflicts: result.conflicts };
@@ -322,6 +350,7 @@ export async function renameStaffAction(staffId: string, name: string): Promise<
   const { businessId } = await requireOwner();
   const result = await renameStaff({ businessId, staffId, name });
   refreshAdmin();
+  refreshPublicSite();
   return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
 }
 
@@ -329,6 +358,7 @@ export async function renameResourceAction(resourceId: string, name: string): Pr
   const { businessId } = await requireOwner();
   const result = await renameResource({ businessId, resourceId, name });
   refreshAdmin();
+  refreshPublicSite();
   return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
 }
 
@@ -337,6 +367,7 @@ export async function createStaffAction(name: string): Promise<ActionResult> {
   const { businessId } = await requireOwner();
   const result = await createStaff({ businessId, name });
   refreshAdmin();
+  refreshPublicSite();
   return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
 }
 
@@ -344,6 +375,7 @@ export async function deactivateResourceAction(resourceId: string): Promise<Acti
   await requireOwner();
   const result = await deactivateResource(resourceId);
   refreshAdmin();
+  refreshPublicSite();
   return result.ok
     ? { ok: true, message: 'Taken out of service.' }
     : { ok: false, message: result.message, conflicts: result.conflicts };
@@ -357,6 +389,7 @@ export async function reactivateAction(
   // Table name is from a closed union, never from the request body.
   await query(`update ${table} set active = true where id = $1 and business_id = $2`, [id, businessId]);
   refreshAdmin();
+  refreshPublicSite();
   return { ok: true, message: 'Back in service.' };
 }
 
@@ -377,6 +410,7 @@ export async function setWorkingHoursAction(input: {
   });
 
   refreshAdmin();
+  refreshPublicSite();
   if (result.ok) {
     return {
       ok: true,
