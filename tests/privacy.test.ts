@@ -8,7 +8,8 @@ import {
   getAppointmentByToken,
 } from '@/lib/booking';
 import { getAvailableSlots } from '@/lib/availability';
-import { query } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
+import { issueVoucher } from '@/lib/vouchers';
 import { IDS, at, labels, nextWorkingDate, resetDatabase } from './helpers/fixtures';
 
 /**
@@ -251,5 +252,80 @@ describe('§9.4 Erasure', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toBe('not_found');
+  });
+
+  /**
+   * Vouchers build spec §7 — a new place personal data lives that this
+   * erasure path did not know about before lib/vouchers.ts's
+   * eraseVoucherPersonalData existed. Two independent matches (purchaser
+   * phone, recipient email) and the ledger/balance must survive untouched —
+   * that money is the studio's record, not the customer's to erase.
+   */
+  it('clears a voucher\'s purchaser and recipient details on erasure, and rotates its link, without touching the balance or ledger', async () => {
+    const date = nextWorkingDate();
+
+    const purchased = await issueVoucher({
+      businessId: IDS.business,
+      initialCents: 50000,
+      purchaserName: customer.name,
+      purchaserPhone: customer.phone,
+    });
+    if (!purchased.ok) throw new Error('setup failed');
+    const originalToken = purchased.voucher.lookup_token;
+
+    // A second voucher, bought BY someone else FOR this customer's email —
+    // §7's "recipient_email is frequently a third party's address" case.
+    const gifted = await issueVoucher({
+      businessId: IDS.business,
+      initialCents: 30000,
+      purchaserName: 'A Friend',
+      recipientEmail: 'thandi@example.com',
+    });
+    if (!gifted.ok) throw new Error('setup failed');
+
+    const booked = await createBooking({
+      businessId: IDS.business,
+      serviceId: IDS.service.gelManicure,
+      staffId: IDS.staff.sarah,
+      startsAt: at(date, '10:00'),
+      email: 'thandi@example.com',
+      ...customer,
+    });
+    if (!booked.ok) throw new Error('setup failed');
+
+    await forgetCustomer({ customerId: booked.appointment.customer_id });
+
+    const byPhone = await queryOne<{
+      purchaser_name: string | null;
+      purchaser_phone: string | null;
+      lookup_token: string;
+      balance_cents: number;
+    }>('select purchaser_name, purchaser_phone, lookup_token, balance_cents from vouchers where id = $1', [
+      purchased.voucher.id,
+    ]);
+    expect(byPhone!.purchaser_name).toBeNull();
+    expect(byPhone!.purchaser_phone).toBeNull();
+    expect(byPhone!.lookup_token).not.toBe(originalToken);
+    expect(byPhone!.balance_cents).toBe(50000); // the money is untouched
+
+    // §7: "null all three on any voucher matching the erased customer's
+    // phone or email" — matching on recipient_email clears purchaser_name
+    // too, even though "A Friend" is a different person. The spec is
+    // explicit about this rather than trying to keep half a record: once
+    // the person this voucher was FOR has been forgotten, the whole
+    // who-gave-it-to-whom record goes with her.
+    const byEmail = await queryOne<{ purchaser_name: string | null; recipient_email: string | null }>(
+      'select purchaser_name, recipient_email from vouchers where id = $1',
+      [gifted.voucher.id],
+    );
+    expect(byEmail!.purchaser_name).toBeNull();
+    expect(byEmail!.recipient_email).toBeNull();
+
+    // The ledger — the studio's financial record — is exactly as it was.
+    const ledger = await query<{ kind: string; amount_cents: number }>(
+      'select kind, amount_cents from voucher_transactions where voucher_id = $1',
+      [purchased.voucher.id],
+    );
+    expect(ledger).toEqual([{ kind: 'issue', amount_cents: 50000 }]);
   });
 });

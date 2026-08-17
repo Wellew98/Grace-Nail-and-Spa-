@@ -51,6 +51,10 @@ function manageUrl(token: string): string {
   return `${SITE_URL}/b/${token}`;
 }
 
+function voucherUrl(token: string): string {
+  return `${SITE_URL}/v/${token}`;
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char] ?? char,
@@ -150,4 +154,75 @@ export async function sendCancellationNotice(appointment: AppointmentDetail): Pr
     `Cancelled: ${appointment.service_name}, ${appointment.staff_name}`,
     layout('Booking cancelled', detailRows(appointment)),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Vouchers — spa-voucher-build-spec.md §6.1.
+// ---------------------------------------------------------------------------
+
+export interface VoucherEmailInput {
+  voucherId: string;
+  code: string;
+  initialCents: number;
+  expiresAt: Date | null;
+  lookupToken: string;
+  recipientEmail: string;
+  businessName: string;
+  businessPhone: string;
+  businessAddress: string | null;
+}
+
+/**
+ * Unlike the three functions above, the caller here needs to know whether
+ * this actually went out: §6.1 says the issue screen "must show whether the
+ * email actually went, based on `emailed_at` — not assume it did," so a
+ * boolean return is what lets the caller decide whether to stamp it. Still
+ * never throws — a failed send is a false return, not an exception, and it
+ * can never fail the write path. The voucher is created and the money is
+ * already taken (§6.1, §10).
+ */
+export async function sendVoucherIssued(input: VoucherEmailInput): Promise<boolean> {
+  const transport = getTransport();
+  if (!transport) return false;
+
+  const expiryLabel = input.expiresAt
+    ? new Intl.DateTimeFormat('en-ZA', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(
+        input.expiresAt,
+      )
+    : null;
+
+  const html = layout(
+    'Your gift voucher',
+    `<p style="margin:0 0 18px;font-size:32px;font-weight:700;letter-spacing:0.04em;text-align:center;color:#c2185b">${escapeHtml(input.code)}</p>
+     <table style="width:100%;border-collapse:collapse;font-size:14px">
+       <tr><td style="padding:6px 0;color:#7a5a72">Value</td><td style="padding:6px 0;text-align:right">${formatZar(input.initialCents)}</td></tr>
+       <tr><td style="padding:6px 0;color:#7a5a72">Expires</td><td style="padding:6px 0;text-align:right">${expiryLabel ? escapeHtml(expiryLabel) : 'Never'}</td></tr>
+     </table>
+     <p style="margin:20px 0 0;font-size:14px;line-height:1.6">
+       <a href="${voucherUrl(input.lookupToken)}" style="color:#c2185b">Check the balance</a> any time — no account needed.
+     </p>
+     <p style="margin:16px 0 0;font-size:13px;line-height:1.6;color:#7a5a72">
+       This voucher can be given to someone else, and used across more than one visit.
+     </p>
+     <p style="margin:16px 0 0;font-size:12px;color:#9b7f94">
+       ${escapeHtml(input.businessName)}${input.businessAddress ? ` · ${escapeHtml(input.businessAddress)}` : ''} · ${escapeHtml(formatPhoneForDisplay(input.businessPhone))}
+     </p>`,
+  );
+
+  try {
+    await transport.send({
+      to: input.recipientEmail,
+      subject: `Your ${formatZar(input.initialCents)} voucher for ${input.businessName}`,
+      html,
+      fromName: input.businessName,
+    });
+    return true;
+  } catch (error) {
+    console.error('[email] voucher issued failed', {
+      voucherId: input.voucherId,
+      transport: transport.name,
+      ...safeError(error),
+    });
+    return false;
+  }
 }

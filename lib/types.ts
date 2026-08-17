@@ -113,3 +113,39 @@ export interface PublicSlot {
 export interface Queryable {
   query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 }
+
+// ---------------------------------------------------------------------------
+// Vouchers — spa-voucher-build-spec.md §2.
+// ---------------------------------------------------------------------------
+
+export type VoucherStatus = 'active' | 'void';
+export type VoucherTransactionKind = 'issue' | 'redeem' | 'refund' | 'adjust' | 'void';
+
+export interface Voucher {
+  id: string;
+  business_id: string;
+  code: string;
+  code_lookup: string;
+  lookup_token: string;
+  initial_cents: number;
+  balance_cents: number;
+  status: VoucherStatus;
+  issued_at: Date;
+  expires_at: Date | null;
+  purchaser_name: string | null;
+  purchaser_phone: string | null;
+  recipient_email: string | null;
+  emailed_at: Date | null;
+  note: string | null;
+}
+
+export interface VoucherTransaction {
+  id: string;
+  voucher_id: string;
+  appointment_id: string | null;
+  kind: VoucherTransactionKind;
+  amount_cents: number;
+  actor: string;
+  reason: string | null;
+  created_at: Date;
+}

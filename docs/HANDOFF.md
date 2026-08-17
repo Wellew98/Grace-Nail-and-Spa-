@@ -27,6 +27,9 @@ comments still cite v1 (v1 §5 = v2 §7, v1 §4 = v2 §6, v1 §7.1 = v2 §14, v1
 | **Privacy / POPIA (v2 §9)** | **Done — see §11 below.** Clears launch-gate item §1.4 |
 | Supabase → GitHub deploy | Working. Migrations apply on push |
 | Vercel | Deployed and serving |
+| **Vouchers, Phase A (`spa-voucher-build-spec.md`)** | **Done.** Schema, `lib/vouchers.ts`, admin screen, Today/walk-in redemption, cancellation refund, erasure. 16 new tests + RLS + privacy cases, all green |
+| Vouchers, Phase B (`/v/[token]`, the email) | **Done, built alongside Phase A** rather than deferred — both were small enough to do together and Phase A alone would have shipped an admin screen with no way for a customer to check her own balance |
+| Vouchers, Phase C (redeem at booking time) | **Not started, and not asked for.** Spec §9: wait until vouchers have been sold for a month and customers ask |
 
 ### What is live right now
 
@@ -369,14 +372,20 @@ the property to preserve. See §13 below for where it has got to.
 lib/availability.ts     v2 §6 — the slot algorithm. 15-min grid, occupancy = duration + turnaround
 lib/booking.ts          v2 §7, §8 — write path, cancel, reschedule, erase. The advisory lock lives here
 lib/config-guards.ts    v2 §14 — what happens to bookings already on the books
-lib/db.ts               pool, transactions, SQLSTATE handling, connection diagnosis
+lib/db.ts               pool, transactions, SQLSTATE handling, connection diagnosis. The
+                        shared advisory lock (lockBusinessForWrite) lives here so
+                        lib/vouchers.ts can take the exact same one
 lib/health.ts           the checks behind /api/health
 lib/time.ts             timezone conversion at the edges
 lib/site.ts             every word of prose, and the rule for what may be claimed
+lib/vouchers.ts         spa-voucher-build-spec.md — issue/redeem/refund/adjust/void,
+                        rand-credit gift vouchers, no customer login (§0)
 components/grace-mark.tsx  the studio's logo, drawn — read its header before editing
-app/admin/              today · week · walk-in · blocks · settings
+app/admin/              today · week · walk-in · blocks · vouchers · settings
+app/v/[token]/          the voucher spec's §6.2 — read-only balance page, no login
 app/privacy/            v2 §9 — the POPIA notice. Read its header before editing a word of it
-tests/                  the v2 §12.A acceptance tests, against real Postgres
+tests/                  the v2 §12.A acceptance tests, and the voucher spec's §8 tests,
+                        against real Postgres
 ```
 
 Design: the organising device is a **lacquer swatch** — a nail bar's characteristic object is

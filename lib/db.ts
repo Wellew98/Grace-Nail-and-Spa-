@@ -1,5 +1,6 @@
 import 'server-only';
 import { Pool, type PoolClient } from 'pg';
+import type { Queryable } from './types';
 
 /**
  * Server-side Postgres access for the booking engine.
@@ -240,6 +241,8 @@ export async function withTransaction<T>(
 export const EXCLUSION_VIOLATION = '23P01';
 /** Postgres SQLSTATE for unique_violation — used by idempotency handling. */
 export const UNIQUE_VIOLATION = '23505';
+/** Postgres SQLSTATE for check_violation — the vouchers `balance_cents` bounds. */
+export const CHECK_VIOLATION = '23514';
 /** Lock-ordering aborts. Safe to retry: nothing was committed. */
 export const DEADLOCK_DETECTED = '40P01';
 export const SERIALIZATION_FAILURE = '40001';
@@ -262,8 +265,52 @@ export function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === UNIQUE_VIOLATION;
 }
 
+export function isCheckViolation(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { code?: string }).code === CHECK_VIOLATION;
+}
+
 /** Which constraint did Postgres reject on? Lets the UI name the clash (§7.1). */
 export function violatedConstraint(error: unknown): string | null {
   if (typeof error !== 'object' || error === null) return null;
   return (error as { constraint?: string }).constraint ?? null;
+}
+
+/**
+ * Serialise writes for one business, for the life of the transaction. MUST be
+ * the first statement after BEGIN.
+ *
+ * Lives here, not in lib/booking.ts, so that lib/vouchers.ts can take
+ * EXACTLY the same lock rather than a lock of its own — the vouchers build
+ * spec (§3) is explicit about this: "the same lock lib/booking.ts uses,
+ * deliberately the same lock rather than a per-voucher one," because the
+ * moment a cancellation needs to touch both an appointment and a voucher, two
+ * lock namespaces become an ordering problem, and a deadlock storm in this
+ * codebase already cost real debugging time once (see HANDOFF §3/§6).
+ *
+ * ---------------------------------------------------------------------------
+ * WHY: `appointments` carries two exclusion constraints. Two concurrent
+ * inserts can each pass one constraint and then block on the other's
+ * uncommitted index entry, in opposite orders — a genuine deadlock, even
+ * though neither row is invalid. Postgres resolves it, but only after waiting
+ * a full `deadlock_timeout` (1s by default) before it even looks for a cycle.
+ * Under real contention those one-second penalties compound badly: a burst of
+ * twenty racers on one slot took over a minute, versus a few milliseconds
+ * uncontended.
+ *
+ * Taking a single lock per business up front gives every writer the same
+ * ordering, so the cycle cannot form and nobody pays the deadlock timeout.
+ * The lock is released automatically on commit or rollback.
+ *
+ * WHAT THIS IS NOT: it is not the thing that prevents double booking or
+ * voucher overspend. The exclusion constraints and the `balance_cents >= 0`
+ * check are what actually enforce correctness; this only removes lock-order
+ * nondeterminism and gives every writer for a business the same queue.
+ *
+ * COST: appointment and voucher writes for one business serialise with each
+ * other. Both are sub-millisecond and this is a single-salon product, so the
+ * ceiling is orders of magnitude above real demand.
+ * ---------------------------------------------------------------------------
+ */
+export async function lockBusinessForWrite(client: Queryable, businessId: string): Promise<void> {
+  await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [businessId]);
 }
