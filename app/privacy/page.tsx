@@ -32,6 +32,10 @@ export const metadata: Metadata = {
  *                         envelope, never in `messages`
  *   the chat on your      components/ai/chat-session.ts — sessionStorage, and
  *   own device            it is not a cookie
+ *   vouchers               0008_vouchers.sql, lib/vouchers.ts — no anon/authenticated
+ *                          RLS access, /v/[token] queries lookup_token only
+ *   voucher erasure        lib/vouchers.ts eraseVoucherPersonalData, wired into
+ *                          lib/booking.ts forgetCustomer
  *
  * Do NOT add a claim here about how the business handles data offline — its
  * paper diary, its staff, its retention habits. None of that is ours to
@@ -163,6 +167,25 @@ export default async function PrivacyPage() {
         </p>
       </Section>
 
+      <Section title="Gift vouchers">
+        <p>
+          Vouchers are bought and paid for in the studio, never online — the site never takes a
+          payment. When one is issued, the studio may record who bought it, a phone number for
+          them, and an email address to send the code to. All three are optional: a voucher works
+          with none of them.
+        </p>
+        <p>
+          There is no account for a voucher either.{' '}
+          <strong className="font-medium text-aubergine-900">
+            The short code on the card, and the link it can be emailed with, are what let anyone
+            holding them check the balance
+          </strong>{' '}
+          — the same way your booking link works above. A voucher is transferable by law, so it is
+          not tied to whoever bought it, and the balance page shows nothing about the purchaser: no
+          name, no phone number, only the value, the history and the expiry date.
+        </p>
+      </Section>
+
       <Section title="The chat button">
         <p>
           The chat on this site is answered by an AI assistant, not by a person. It can tell you
@@ -222,6 +245,14 @@ export default async function PrivacyPage() {
           still to come is cancelled at the same time, since we would have no way to reach you
           about it. If you would rather ask a person, phone or WhatsApp the studio on the number
           above.
+        </p>
+        <p>
+          If your name, phone number or email is recorded against a gift voucher, that is erased
+          the same way and at the same time. The voucher itself keeps working exactly as before —
+          its balance, its history and its expiry are the studio&rsquo;s financial record, not
+          yours to erase, and whoever is holding the card or the link can still use it. Only who it
+          names is removed, and the link it was emailed with stops working, so an old email cannot
+          be used to identify you afterwards.
         </p>
         <p>
           You can also ask the studio for a copy of what it holds about you, or to correct

@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto';
 import {
   isExclusionViolation,
   isUniqueViolation,
+  lockBusinessForWrite,
   violatedConstraint,
   withTransaction,
   query,
@@ -11,6 +12,7 @@ import {
 import { getAvailableSlots, getBusiness, getService, resolveSlot } from './availability';
 import { normalisePhone } from './phone';
 import { addMinutes, utcToZonedDate } from './time';
+import { eraseVoucherPersonalData, refundVoucherRedemptionsForAppointment } from './vouchers';
 import type { Appointment, BookingSource, Customer, Queryable, Slot } from './types';
 
 /** Spec §5 step 6: crypto random, 32 bytes, url-safe. */
@@ -108,38 +110,6 @@ class SlotUnavailable extends Error {
     super('slot_unavailable');
     this.name = 'SlotUnavailable';
   }
-}
-
-/**
- * Serialise appointment writes for one business, for the life of the
- * transaction. MUST be the first statement after BEGIN.
- *
- * ---------------------------------------------------------------------------
- * WHY: `appointments` carries two exclusion constraints. Two concurrent
- * inserts can each pass one constraint and then block on the other's
- * uncommitted index entry, in opposite orders — a genuine deadlock, even
- * though neither row is invalid. Postgres resolves it, but only after waiting
- * a full `deadlock_timeout` (1s by default) before it even looks for a cycle.
- * Under real contention those one-second penalties compound badly: a burst of
- * twenty racers on one slot took over a minute, versus a few milliseconds
- * uncontended.
- *
- * Taking a single lock per business up front gives every writer the same
- * ordering, so the cycle cannot form and nobody pays the deadlock timeout.
- * The lock is released automatically on commit or rollback.
- *
- * WHAT THIS IS NOT: it is not the thing that prevents double booking. The
- * exclusion constraints still are, and they still reject overlaps if this lock
- * were removed tomorrow. This only removes lock-order nondeterminism.
- *
- * COST: appointment inserts for one business serialise. The insert is
- * sub-millisecond and this is a single-salon product, so the ceiling is orders
- * of magnitude above real demand. Determinism is worth far more here than
- * theoretical write throughput.
- * ---------------------------------------------------------------------------
- */
-async function lockBusinessForWrite(client: Queryable, businessId: string): Promise<void> {
-  await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [businessId]);
 }
 
 /**
@@ -439,6 +409,8 @@ export async function cancelBooking(options: {
   }
 
   const updated = await withTransaction(async (client) => {
+    await lockBusinessForWrite(client, appointment.business_id);
+
     const rows = await client.query(
       `update appointments
           set status = 'cancelled', cancelled_at = now()
@@ -454,6 +426,12 @@ export async function cancelBooking(options: {
             values ($1, 'cancelled', $2, $3)`,
       [appointmentId, actor, JSON.stringify({ reason })],
     );
+
+    // Vouchers build spec §3: "the redemption is refunded, not deleted."
+    // Already inside the transaction that holds the business lock, so this is
+    // just another write on the same queue — no new locking.
+    await refundVoucherRedemptionsForAppointment(client, appointmentId, actor);
+
     return rows.rows[0] as unknown as Appointment;
   });
 
@@ -735,7 +713,25 @@ export async function forgetCustomer(options: {
               values ($1, 'cancelled', $2, $3)`,
         [appointment.id, actor, JSON.stringify({ reason: 'customer_erased' })],
       );
+      // Same reasoning as an ordinary cancellation (vouchers spec §3): an
+      // appointment paid down with a voucher still owes the money back when
+      // erasure cancels it out from under the voucher, not just when the
+      // customer or the owner cancels it directly.
+      await refundVoucherRedemptionsForAppointment(client, appointment.id, actor);
     }
+
+    // Vouchers spec §7: her purchaser/recipient details are personal
+    // information too, and are a place it lives that HANDOFF §11's erasure
+    // path did not know about until now. Match on the details captured
+    // BEFORE the wipe below — the same reason `upcoming` was read before the
+    // transaction started. Ledger and balance are untouched; only who the
+    // voucher names is cleared, exactly as the customer row itself is
+    // emptied rather than deleted.
+    await eraseVoucherPersonalData(client, {
+      businessId: customer.business_id,
+      phone: customer.phone,
+      email: customer.email,
+    });
 
     // Rotate every manage token, past and future, so old links stop resolving.
     // Generated per row in application code because manage_token is unique.

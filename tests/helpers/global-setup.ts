@@ -43,6 +43,9 @@ export default async function setup() {
   // 0007 IS applied: it is schema, and the chat route records a transcript into
   // it on every turn.
   await db.query(sql('supabase/migrations/0007_ai_conversations.sql'));
+  // 0008 IS applied: it is schema, and tests/vouchers.test.ts exercises it
+  // against real Postgres, same reasoning as every table above.
+  await db.query(sql('supabase/migrations/0008_vouchers.sql'));
   await db.query(sql('supabase/seed.sql'));
   await db.end();
 }
