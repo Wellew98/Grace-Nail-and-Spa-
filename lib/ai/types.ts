@@ -253,8 +253,6 @@ export interface ServiceCard {
 
 export interface ServicesAttachment {
   kind: 'services';
-  sampleData: boolean;
-  sampleDataNotice?: string;
   services: ServiceCard[];
 }
 
@@ -290,8 +288,6 @@ export interface AvailabilityAttachment {
    * `/book` already follows.
    */
   staffPinned: boolean;
-  sampleData: boolean;
-  sampleDataNotice?: string;
   options: AvailabilityOption[];
 }
 
@@ -437,17 +433,4 @@ export interface AvailabilityInfo {
   service: string;
   timezone?: string;
   slots: AvailabilitySlot[];
-}
-
-/**
- * Attached to every tool result that carries treatment or therapist data while
- * the placeholder menu is still in the database.
- *
- * Derived from the data on each call (`hasDemoData()`), never from a flag —
- * spec v2 §2. A flag has to be remembered and fails in the wrong direction:
- * forget it and the assistant quotes invented prices with nothing saying so.
- */
-export interface SampleDataFlag {
-  sample_data: boolean;
-  sample_data_notice?: string;
 }

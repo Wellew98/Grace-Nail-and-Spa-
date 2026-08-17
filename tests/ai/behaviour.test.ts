@@ -98,25 +98,18 @@ describe('an owner edit in Admin', () => {
   });
 });
 
-describe('the sample-menu notice', () => {
-  it('is derived from the data, so it disappears when the placeholders go', async () => {
-    // Mirrors components/demo-banner.tsx. A flag would have to be remembered
-    // and fails in the wrong direction: forget it and invented prices ship with
-    // nothing saying so.
-    const seeded = await getServices(context);
-    expect(seeded.sample_data).toBe(false);
-
+describe('the treatment catalogue', () => {
+  it('is read live, so an edit in Setup reaches the assistant with no re-sync', async () => {
+    // There is deliberately no AI-specific service catalogue: the assistant
+    // reads the same active rows the booking page does.
     await query(
       `insert into services (id, business_id, name, duration_minutes, price_cents, active)
-       values ('dddddddd-0000-4000-8000-000000000001', $1, 'Placeholder', 30, 10000, true)`,
+       values ('eeeeeeee-0000-4000-8000-000000000001', $1, 'Brow Shape', 30, 10000, true)`,
       [IDS.business],
     );
+    expect((await getServices(context)).services.map((s) => s.name)).toContain('Brow Shape');
 
-    const withDemo = await getServices(context);
-    expect(withDemo.sample_data).toBe(true);
-    expect(withDemo.sample_data_notice).toMatch(/placeholder/i);
-
-    await query("delete from services where id::text like 'dddddddd-%'");
-    expect((await getServices(context)).sample_data).toBe(false);
+    await query("update services set active = false where id = 'eeeeeeee-0000-4000-8000-000000000001'");
+    expect((await getServices(context)).services.map((s) => s.name)).not.toContain('Brow Shape');
   });
 });

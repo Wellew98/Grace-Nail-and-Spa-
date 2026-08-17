@@ -11,7 +11,7 @@ import {
 import { query } from '../db';
 import { formatDuration, formatZar } from '../money';
 import { formatPhoneForDisplay } from '../phone';
-import { getActiveServices, getActiveStaff, getOpeningHours, hasDemoData } from '../public-data';
+import { getActiveServices, getActiveStaff, getOpeningHours } from '../public-data';
 import { DAY_NAMES } from '../site';
 import {
   formatSlotLabel,
@@ -32,7 +32,6 @@ import type {
   BusinessInfo,
   ConflictAttachment,
   OpeningHoursDay,
-  SampleDataFlag,
   ServiceInfo,
   StaffInfo,
   ToolResult,
@@ -65,14 +64,6 @@ import type {
  * do not: a name is enough, and the id is resolved server-side.
  * ---------------------------------------------------------------------------
  */
-
-/**
- * Mirrors `components/demo-banner.tsx`. Attached to tool results rather than
- * written into the prompt so it is derived from the data on every call and
- * disappears by itself when the placeholder rows go (spec v2 §2).
- */
-const SAMPLE_DATA_NOTICE =
-  'Sample menu. These treatments, prices and therapists are placeholders while the real ones are confirmed.';
 
 export interface ToolContext {
   businessId: string;
@@ -210,15 +201,13 @@ async function resourceRequirements(businessId: string): Promise<Set<string>> {
 
 export async function getServices(
   context: ToolContext,
-): Promise<SampleDataFlag & { services: ServiceInfo[] }> {
-  const [services, requiresResource, sampleData] = await Promise.all([
+): Promise<{ services: ServiceInfo[] }> {
+  const [services, requiresResource] = await Promise.all([
     getActiveServices(context.businessId),
     resourceRequirements(context.businessId),
-    hasDemoData(context.businessId),
   ]);
 
   return {
-    ...sampleDataFlag(sampleData),
     services: services.map((service) => ({
       id: service.id,
       name: service.name,
@@ -245,7 +234,7 @@ export async function getServices(
 
 export async function getStaff(
   context: ToolContext,
-): Promise<SampleDataFlag & { staff: StaffInfo[] }> {
+): Promise<{ staff: StaffInfo[] }> {
   // Columns are listed explicitly rather than `s.*`. `staff` also holds phone,
   // email and the Phase 3 Google refresh token; a `select *` here would put all
   // of them one careless spread away from the model's context.
@@ -267,10 +256,7 @@ export async function getStaff(
     byName.set(row.name, entry);
   }
 
-  return {
-    ...sampleDataFlag(await hasDemoData(context.businessId)),
-    staff: [...byName.values()],
-  };
+  return { staff: [...byName.values()] };
 }
 
 // ---------------------------------------------------------------------------
@@ -338,7 +324,6 @@ export async function checkAvailability(
   });
 
   const staffNames = new Map(staff.map((member) => [member.id, member.name]));
-  const sample = sampleDataFlag(await hasDemoData(context.businessId));
 
   // ONE engine call, TWO projections. See the note on ToolResult.
   //
@@ -378,8 +363,6 @@ export async function checkAvailability(
       // just whoever sorted first among the free, and pinning it would turn an
       // indifferent customer into a 409.
       staffPinned: staffId !== null,
-      sampleData: sample.sample_data,
-      ...(sample.sample_data_notice ? { sampleDataNotice: sample.sample_data_notice } : {}),
       options: resolved,
     },
   };
@@ -402,10 +385,6 @@ function dateWindowError(
 // ---------------------------------------------------------------------------
 // Dispatch
 // ---------------------------------------------------------------------------
-
-function sampleDataFlag(present: boolean): SampleDataFlag {
-  return present ? { sample_data: true, sample_data_notice: SAMPLE_DATA_NOTICE } : { sample_data: false };
-}
 
 /**
  * Run one tool call.
@@ -471,10 +450,6 @@ export async function executeTool(
           },
           client: {
             kind: 'services',
-            sampleData: services.sample_data,
-            ...(services.sample_data_notice
-              ? { sampleDataNotice: services.sample_data_notice }
-              : {}),
             services: services.services.map((service) => ({
               id: service.id,
               name: service.name,

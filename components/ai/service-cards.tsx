@@ -27,12 +27,6 @@ export function ServiceCards({
 
   return (
     <div className="space-y-2">
-      {attachment.sampleData && (
-        <p className="rounded-lg bg-gilt-200 px-3 py-2 text-[0.7rem] leading-snug text-gilt-600">
-          {attachment.sampleDataNotice ?? 'Sample menu: these are placeholders.'}
-        </p>
-      )}
-
       <ul className="space-y-2">
         {attachment.services.map((service) => (
           <li key={service.id}>

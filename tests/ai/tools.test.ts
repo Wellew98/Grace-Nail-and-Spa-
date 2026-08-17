@@ -363,43 +363,45 @@ describe('check_availability', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Sample data
+// Whatever is in the menu
 // ---------------------------------------------------------------------------
 
-describe('the placeholder menu', () => {
-  it('is flagged as sample data, and still presented', async () => {
-    // Not deflected. The site shows the sample menu with a banner; the
-    // assistant does the same thing, from the same signal.
-    const before = await getServices(context);
-    expect(before.sample_data).toBe(false);
-
+describe('the treatment list', () => {
+  it('reports whatever is active, with no separate AI catalogue', async () => {
+    // The assistant reads the same rows /book does. When the owner renames a
+    // treatment in Setup, the assistant says the new name on the next call —
+    // there is nothing to re-sync.
     await query(
       `insert into services (id, business_id, name, duration_minutes, turnaround_minutes, price_cents, sort_order)
-       values ('dddddddd-0000-4000-8000-000000000001', $1, 'Placeholder Treatment', 30, 0, 19900, 99)`,
+       values ('eeeeeeee-0000-4000-8000-000000000001', $1, 'Signature Overlay', 30, 0, 19900, 99)`,
       [IDS.business],
     );
 
     const after = await getServices(context);
-    expect(after.sample_data).toBe(true);
-    expect(after.sample_data_notice).toMatch(/placeholder/i);
-    expect(after.services.map((service) => service.name)).toContain('Placeholder Treatment');
+    expect(after.services.map((service) => service.name)).toContain('Signature Overlay');
+
+    await query(
+      "update services set name = 'Renamed Overlay' where id = 'eeeeeeee-0000-4000-8000-000000000001'",
+    );
+    const renamed = await getServices(context);
+    expect(renamed.services.map((service) => service.name)).toContain('Renamed Overlay');
+    expect(renamed.services.map((service) => service.name)).not.toContain('Signature Overlay');
   });
 
-  it('is flagged on the therapists and on availability too', async () => {
+  it('reports a newly added therapist without any extra wiring', async () => {
     await query(
       `insert into staff (id, business_id, name, active)
-       values ('dddddddd-0000-4000-8000-000000000002', $1, 'Placeholder Therapist', true)`,
+       values ('eeeeeeee-0000-4000-8000-000000000002', $1, 'Thandi', true)`,
       [IDS.business],
     );
 
-    expect((await getStaff(context)).sample_data).toBe(true);
+    expect((await getStaff(context)).staff.map((member) => member.name)).toContain('Thandi');
 
-    // Sample data flag is only in the client projection, not the model projection.
     const availability = await checkAvailability(context, {
       service_id: IDS.service.gelManicure,
       date: nextWorkingDate(),
     });
-    expect(availability.ok && availability.client.sampleData).toBe(true);
+    expect(availability.ok).toBe(true);
   });
 });
 

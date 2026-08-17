@@ -12,9 +12,13 @@ import {
 } from '@/lib/booking';
 import {
   addAvailabilityBlock,
+  createStaff,
   deactivateResource,
   deactivateService,
   deactivateStaff,
+  renameResource,
+  renameService,
+  renameStaff,
   setWorkingHours,
   updateService,
   type HoursWindow,
@@ -266,7 +270,20 @@ export async function updateServiceAction(
 
   // §7.1: duration, price and turnaround changes save silently. Existing
   // bookings keep their stored times and price_cents_at_booking.
-  await updateService(serviceId, patch);
+  //
+  // The name goes through the guard rather than the raw patch so it gets the
+  // same trimming and blank-rejection as every other rename.
+  const { name, ...rest } = patch;
+  await updateService(serviceId, rest);
+
+  if (name !== undefined) {
+    const renamed = await renameService({ businessId, serviceId, name });
+    if (!renamed.ok) {
+      refreshAdmin();
+      return { ok: false, message: renamed.message };
+    }
+  }
+
   refreshAdmin();
   return { ok: true, message: 'Saved. Bookings already on the diary are unchanged.' };
 }
@@ -295,6 +312,32 @@ export async function deactivateStaffAction(staffId: string): Promise<ActionResu
   return result.ok
     ? { ok: true, message: 'Therapist made inactive.' }
     : { ok: false, message: result.message, conflicts: result.conflicts };
+}
+
+/**
+ * Rename a therapist. Delegates to the guard because renaming a placeholder row
+ * also has to move it out of the demo id namespace — see renameStaff().
+ */
+export async function renameStaffAction(staffId: string, name: string): Promise<ActionResult> {
+  const { businessId } = await requireOwner();
+  const result = await renameStaff({ businessId, staffId, name });
+  refreshAdmin();
+  return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
+}
+
+export async function renameResourceAction(resourceId: string, name: string): Promise<ActionResult> {
+  const { businessId } = await requireOwner();
+  const result = await renameResource({ businessId, resourceId, name });
+  refreshAdmin();
+  return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
+}
+
+/** §2's launch gate: the owner has to be able to enter her real therapists. */
+export async function createStaffAction(name: string): Promise<ActionResult> {
+  const { businessId } = await requireOwner();
+  const result = await createStaff({ businessId, name });
+  refreshAdmin();
+  return result.ok ? { ok: true, message: result.message } : { ok: false, message: result.message };
 }
 
 export async function deactivateResourceAction(resourceId: string): Promise<ActionResult> {

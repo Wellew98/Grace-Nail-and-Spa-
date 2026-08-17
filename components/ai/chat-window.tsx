@@ -297,7 +297,6 @@ export function ChatWindow({
               timezone: conflict.timezone,
               staffPinned: conflict.staffPinned,
               servicePrice: conflict.servicePrice,
-              sampleData: false,
               options: conflict.options,
             }}
             disabled={busy}
