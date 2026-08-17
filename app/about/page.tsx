@@ -5,7 +5,7 @@ import { SITE } from '@/lib/site';
 
 export const metadata: Metadata = {
   title: 'About',
-  description: 'A small studio with three therapists, proper appointment lengths and no rushing.',
+  description: 'A small studio with proper appointment lengths and no rushing.',
 };
 
 export default async function AboutPage() {
