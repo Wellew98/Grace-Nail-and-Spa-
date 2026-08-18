@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { getAppointmentById, getAppointmentByToken, rescheduleBooking } from '@/lib/booking';
 import { getActiveStaff, getBusiness } from '@/lib/public-data';
@@ -75,7 +75,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   const detail = await getAppointmentById(result.appointment.id);
   if (detail) {
-    await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+    // After the response, so a slow mailer never delays the new time showing.
+    after(async () => {
+      await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+    });
   }
 
   // The manage token travels to the new row, so the customer's link is unchanged.

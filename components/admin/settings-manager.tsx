@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation';
 import { Swatch } from '@/components/swatch';
 import { ConflictList } from './conflict-list';
 import {
+  createStaffAction,
   deactivateResourceAction,
   deactivateServiceAction,
   deactivateStaffAction,
   reactivateAction,
+  renameResourceAction,
+  renameStaffAction,
   setWorkingHoursAction,
   updateServiceAction,
   type ActionResult,
@@ -107,8 +110,8 @@ export function SettingsManager({
       <section>
         <h2 className="font-display text-lg font-semibold text-aubergine-900">Therapists</h2>
         <p className="mt-1 text-sm text-mauve-500">
-          A therapist with bookings ahead of her cannot be made inactive until those bookings are
-          moved or cancelled.
+          Change a name and press Save. A therapist with bookings ahead of her cannot be made
+          inactive until those bookings are moved or cancelled.
         </p>
         <ToggleList
           rows={staff}
@@ -116,8 +119,20 @@ export function SettingsManager({
           feedback={feedback}
           timezone={timezone}
           keyPrefix="staff"
+          nameLabel="Therapist name"
+          onRename={(id, name) => run('staff:section', () => renameStaffAction(id, name))}
           onDeactivate={(id) => run(`staff:${id}`, () => deactivateStaffAction(id))}
           onReactivate={(id) => run(`staff:${id}`, () => reactivateAction('staff', id))}
+        />
+        {/* Renaming a sample row changes its id, so this note is kept at section
+            level — a row-level one would unmount with the row it belongs to. */}
+        <Note feedback={feedback['staff:section']} timezone={timezone} />
+        <AddRow
+          label="Add a therapist"
+          placeholder="Her name"
+          buttonText="Add therapist"
+          pending={pending}
+          onAdd={(name) => run('staff:section', () => createStaffAction(name))}
         />
       </section>
 
@@ -125,7 +140,8 @@ export function SettingsManager({
       <section>
         <h2 className="font-display text-lg font-semibold text-aubergine-900">Rooms and equipment</h2>
         <p className="mt-1 text-sm text-mauve-500">
-          Same rule: anything with bookings ahead of it has to be cleared first.
+          Same rules: rename and Save, and anything with bookings ahead of it has to be cleared
+          before it can be taken out of service.
         </p>
         <ToggleList
           rows={resources}
@@ -133,9 +149,12 @@ export function SettingsManager({
           feedback={feedback}
           timezone={timezone}
           keyPrefix="resource"
+          nameLabel="Room or equipment name"
+          onRename={(id, name) => run('resource:section', () => renameResourceAction(id, name))}
           onDeactivate={(id) => run(`resource:${id}`, () => deactivateResourceAction(id))}
           onReactivate={(id) => run(`resource:${id}`, () => reactivateAction('resources', id))}
         />
+        <Note feedback={feedback['resource:section']} timezone={timezone} />
       </section>
 
       {/* ----------------------------------------------------------- hours */}
@@ -200,24 +219,43 @@ function ServiceEditor({
   pending: boolean;
   feedback: Feedback;
   timezone: string;
-  onSave: (patch: { duration_minutes: number; turnaround_minutes: number; price_cents: number }) => void;
+  onSave: (patch: {
+    name: string;
+    duration_minutes: number;
+    turnaround_minutes: number;
+    price_cents: number;
+  }) => void;
   onDeactivate: () => void;
   onReactivate: () => void;
 }) {
+  const [name, setName] = useState(service.name);
   const [duration, setDuration] = useState(String(service.durationMinutes));
   const [turnaround, setTurnaround] = useState(String(service.turnaroundMinutes));
   const [rand, setRand] = useState(String(service.priceCents / 100));
 
+  const trimmedName = name.trim();
   const dirty =
-    Number(duration) !== service.durationMinutes ||
-    Number(turnaround) !== service.turnaroundMinutes ||
-    Math.round(Number(rand) * 100) !== service.priceCents;
+    trimmedName.length > 0 &&
+    (trimmedName !== service.name ||
+      Number(duration) !== service.durationMinutes ||
+      Number(turnaround) !== service.turnaroundMinutes ||
+      Math.round(Number(rand) * 100) !== service.priceCents);
 
   return (
     <li className="rounded-2xl border border-blush-200 bg-white px-4 py-4">
       <div className="flex items-center gap-3">
+        {/* The swatch is derived from the saved name, so it follows a rename
+            once the save lands rather than flickering as she types. */}
         <Swatch serviceName={service.name} size="dot" />
-        <p className="flex-1 font-medium text-aubergine-900">{service.name}</p>
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">Treatment name</span>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={80}
+            className="w-full rounded-lg border border-blush-300 px-2.5 py-2 text-sm font-medium text-aubergine-900 focus:border-aubergine-900 focus:outline-none"
+          />
+        </label>
         {!service.active && (
           <span className="rounded-full bg-blush-200 px-2.5 py-1 text-[0.7rem] text-mauve-500">
             hidden
@@ -227,9 +265,13 @@ function ServiceEditor({
 
       <div className="mt-3 grid grid-cols-3 gap-2.5">
         <Small label="Minutes" value={duration} onChange={setDuration} />
-        <Small label="Turnaround" value={turnaround} onChange={setTurnaround} />
+        <Small label="Cleanup after" value={turnaround} onChange={setTurnaround} />
         <Small label="Price (R)" value={rand} onChange={setRand} />
       </div>
+      <p className="mt-1.5 text-[0.7rem] text-mauve-400">
+        Cleanup after is the gap held before the next client — wiping down, sterilising,
+        resetting the station. It is added on top of the treatment length.
+      </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
         <button
@@ -237,6 +279,7 @@ function ServiceEditor({
           disabled={pending || !dirty}
           onClick={() =>
             onSave({
+              name: trimmedName,
               duration_minutes: Number(duration),
               turnaround_minutes: Number(turnaround),
               price_cents: Math.round(Number(rand) * 100),
@@ -281,6 +324,8 @@ function ToggleList({
   feedback,
   timezone,
   keyPrefix,
+  nameLabel,
+  onRename,
   onDeactivate,
   onReactivate,
 }: {
@@ -289,31 +334,143 @@ function ToggleList({
   feedback: Record<string, Feedback>;
   timezone: string;
   keyPrefix: string;
+  nameLabel: string;
+  onRename: (id: string, name: string) => void;
   onDeactivate: (id: string) => void;
   onReactivate: (id: string) => void;
 }) {
   return (
     <ul className="mt-5 space-y-3">
       {rows.map((row) => (
-        <li key={row.id} className="rounded-2xl border border-blush-200 bg-white px-4 py-3.5">
-          <div className="flex items-center gap-3">
-            <p className="flex-1 text-aubergine-900">
-              {row.name}
-              {!row.active && <span className="ml-2 text-xs text-mauve-400">inactive</span>}
-            </p>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => (row.active ? onDeactivate(row.id) : onReactivate(row.id))}
-              className="rounded-full border border-blush-300 px-4 py-2 text-xs hover:bg-blush-100 disabled:opacity-50"
-            >
-              {row.active ? 'Make inactive' : 'Reactivate'}
-            </button>
-          </div>
-          <Note feedback={feedback[`${keyPrefix}:${row.id}`]} timezone={timezone} />
-        </li>
+        <ToggleRow
+          // Re-keying a sample row on rename changes row.id, which remounts the
+          // row and resets its draft. That is the behaviour we want: the draft
+          // is now stale by definition.
+          key={row.id}
+          row={row}
+          pending={pending}
+          feedback={feedback[`${keyPrefix}:${row.id}`]}
+          timezone={timezone}
+          nameLabel={nameLabel}
+          onRename={onRename}
+          onDeactivate={onDeactivate}
+          onReactivate={onReactivate}
+        />
       ))}
     </ul>
+  );
+}
+
+function ToggleRow({
+  row,
+  pending,
+  feedback,
+  timezone,
+  nameLabel,
+  onRename,
+  onDeactivate,
+  onReactivate,
+}: {
+  row: NamedRow;
+  pending: boolean;
+  feedback: Feedback;
+  timezone: string;
+  nameLabel: string;
+  onRename: (id: string, name: string) => void;
+  onDeactivate: (id: string) => void;
+  onReactivate: (id: string) => void;
+}) {
+  const [name, setName] = useState(row.name);
+  const trimmed = name.trim();
+  const dirty = trimmed.length > 0 && trimmed !== row.name;
+
+  return (
+    <li className="rounded-2xl border border-blush-200 bg-white px-4 py-3.5">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <label className="min-w-0 flex-1">
+          <span className="sr-only">{nameLabel}</span>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && dirty && !pending) onRename(row.id, trimmed);
+            }}
+            maxLength={80}
+            className="w-full rounded-lg border border-blush-300 px-2.5 py-2 text-sm text-aubergine-900 focus:border-aubergine-900 focus:outline-none"
+          />
+        </label>
+
+        {!row.active && <span className="text-xs text-mauve-400">inactive</span>}
+
+        <button
+          type="button"
+          disabled={pending || !dirty}
+          onClick={() => onRename(row.id, trimmed)}
+          className="rounded-full bg-aubergine-900 px-4 py-2 text-xs text-blush-50 disabled:opacity-40"
+        >
+          Save
+        </button>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => (row.active ? onDeactivate(row.id) : onReactivate(row.id))}
+          className="rounded-full border border-blush-300 px-4 py-2 text-xs hover:bg-blush-100 disabled:opacity-50"
+        >
+          {row.active ? 'Make inactive' : 'Reactivate'}
+        </button>
+      </div>
+      <Note feedback={feedback} timezone={timezone} />
+    </li>
+  );
+}
+
+/** A single-field "add one of these" row. Clears itself on a successful add. */
+function AddRow({
+  label,
+  placeholder,
+  buttonText,
+  pending,
+  onAdd,
+}: {
+  label: string;
+  placeholder: string;
+  buttonText: string;
+  pending: boolean;
+  onAdd: (name: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const trimmed = name.trim();
+
+  function submit() {
+    if (!trimmed || pending) return;
+    onAdd(trimmed);
+    setName('');
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2.5 rounded-2xl border border-dashed border-blush-300 px-4 py-3.5">
+      <label className="min-w-0 flex-1">
+        <span className="block text-[0.7rem] text-mauve-500">{label}</span>
+        <input
+          value={name}
+          placeholder={placeholder}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') submit();
+          }}
+          maxLength={80}
+          className="mt-1 w-full rounded-lg border border-blush-300 px-2.5 py-2 text-sm text-aubergine-900 focus:border-aubergine-900 focus:outline-none"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={pending || trimmed.length === 0}
+        onClick={submit}
+        className="self-end rounded-full bg-aubergine-900 px-4 py-2 text-xs text-blush-50 disabled:opacity-40"
+      >
+        {buttonText}
+      </button>
+    </div>
   );
 }
 

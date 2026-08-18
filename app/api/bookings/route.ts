@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { createBooking, getAppointmentById } from '@/lib/booking';
 import { getBusiness } from '@/lib/public-data';
@@ -91,8 +91,17 @@ export async function POST(request: Request) {
   const detail = await getAppointmentById(result.appointment.id);
 
   // A replay of the same idempotency key must not send a second confirmation.
+  //
+  // Dispatched with after(), so the customer's confirmation screen is not
+  // waiting on a mail server. It used to be awaited here, which was fine
+  // against an HTTP API and would not be against SMTP: a STARTTLS handshake
+  // and conversation is seconds, and spec §3 is "book in under 60 seconds".
+  // after() runs this once the response has been sent, and keeps the function
+  // alive to do it rather than letting the platform freeze mid-send.
   if (detail && !result.replayed) {
-    await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+    after(async () => {
+      await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+    });
   }
 
   return NextResponse.json(

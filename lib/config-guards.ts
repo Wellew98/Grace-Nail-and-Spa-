@@ -1,5 +1,5 @@
 import 'server-only';
-import { query, withTransaction } from './db';
+import { query, queryOne, withTransaction } from './db';
 import { getBusiness } from './availability';
 import { dayOfWeekInZone, utcToZonedDate, wallTimeToMinutes, zonedToUtc } from './time';
 import type { AppointmentDetail } from './booking';
@@ -156,6 +156,140 @@ export async function updateService(
   await query(`update services set ${assignments} where id = $1`, [serviceId, ...fields.map((f) => (patch as Record<string, unknown>)[f])]);
 }
 
+// ---------------------------------------------------- naming (§7.1 additions)
+
+const MAX_NAME_LENGTH = 80;
+
+export type RenameResult =
+  | { ok: true; id: string; message: string }
+  | { ok: false; message: string };
+
+/** Trim, collapse inner whitespace, and reject the empty / absurd cases. */
+function cleanName(raw: string): { ok: true; name: string } | { ok: false; message: string } {
+  const name = raw.trim().replace(/\s+/g, ' ');
+  if (name.length === 0) return { ok: false, message: 'A name cannot be blank.' };
+  if (name.length > MAX_NAME_LENGTH) {
+    return { ok: false, message: `That name is too long (${MAX_NAME_LENGTH} characters maximum).` };
+  }
+  return { ok: true, name };
+}
+
+/**
+ * Rename a therapist, treatment or room.
+ *
+ * Names are display-only: nothing keys off them, and `appointments` stores the
+ * times and price it was booked at rather than deriving them, so a rename can
+ * never disturb the diary. Renaming is therefore the normal way the owner
+ * edits her menu and her team — including the starter rows the project shipped
+ * with.
+ *
+ * The tenancy check is the load-bearing part. These run through the pooled
+ * connection, which bypasses RLS by design (§15), so the business_id has to be
+ * asserted here.
+ */
+async function rename(
+  table: 'staff' | 'services' | 'resources',
+  label: string,
+  options: { businessId: string; id: string; name: string },
+): Promise<RenameResult> {
+  const cleaned = cleanName(options.name);
+  if (!cleaned.ok) return cleaned;
+
+  // Table name is from a closed union, never from the request body.
+  const existing = await queryOne<{ business_id: string }>(
+    `select business_id from ${table} where id = $1`,
+    [options.id],
+  );
+  if (!existing || existing.business_id !== options.businessId) {
+    return { ok: false, message: `That ${label} does not belong to this business.` };
+  }
+
+  await query(`update ${table} set name = $2 where id = $1`, [options.id, cleaned.name]);
+  return { ok: true, id: options.id, message: 'Name saved.' };
+}
+
+export async function renameStaff(options: {
+  businessId: string;
+  staffId: string;
+  name: string;
+}): Promise<RenameResult> {
+  return rename('staff', 'therapist', {
+    businessId: options.businessId,
+    id: options.staffId,
+    name: options.name,
+  });
+}
+
+export async function renameService(options: {
+  businessId: string;
+  serviceId: string;
+  name: string;
+}): Promise<RenameResult> {
+  return rename('services', 'treatment', {
+    businessId: options.businessId,
+    id: options.serviceId,
+    name: options.name,
+  });
+}
+
+export async function renameResource(options: {
+  businessId: string;
+  resourceId: string;
+  name: string;
+}): Promise<RenameResult> {
+  return rename('resources', 'room', {
+    businessId: options.businessId,
+    id: options.resourceId,
+    name: options.name,
+  });
+}
+
+export type CreateStaffResult =
+  | { ok: true; id: string; linkedServices: number; message: string }
+  | { ok: false; message: string };
+
+/**
+ * Add a therapist.
+ *
+ * She is linked to every currently active treatment, because there is no UI for
+ * staff_services and the alternative default — linked to nothing — produces a
+ * therapist who exists, looks fine in Setup, and silently never appears on
+ * /book. All-treatments is the wrong default for a large salon and the only
+ * safe one here.
+ *
+ * She still has no working_hours, so she genuinely is not bookable until those
+ * are set. That is real, not a bug, and the caller must say so out loud.
+ */
+export async function createStaff(options: {
+  businessId: string;
+  name: string;
+}): Promise<CreateStaffResult> {
+  const cleaned = cleanName(options.name);
+  if (!cleaned.ok) return cleaned;
+  const { name } = cleaned;
+
+  return withTransaction(async (client) => {
+    const inserted = await client.query(
+      'insert into staff (business_id, name) values ($1, $2) returning id',
+      [options.businessId, name],
+    );
+    const id = (inserted.rows[0] as { id: string }).id;
+
+    const linked = await client.query(
+      `insert into staff_services (staff_id, service_id)
+       select $1, s.id from services s where s.business_id = $2 and s.active`,
+      [id, options.businessId],
+    );
+
+    return {
+      ok: true as const,
+      id,
+      linkedServices: linked.rowCount ?? 0,
+      message: `${name} added, and set to do every treatment. Set her working hours below — until you do, she will not be offered on the booking page.`,
+    };
+  });
+}
+
 export interface HoursWindow {
   start_time: string; // 'HH:MM'
   end_time: string; // 'HH:MM'
@@ -207,7 +341,7 @@ export async function setWorkingHours(options: {
       conflicts: orphaned,
       message:
         `${orphaned.length} booking${orphaned.length === 1 ? '' : 's'} would fall outside the new hours. ` +
-        'Keep them as they are, or cancel them — nothing is cancelled automatically.',
+        'Keep them as they are, or cancel them. Nothing is cancelled automatically.',
     };
   }
 

@@ -41,7 +41,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <>
                 {' '}
                 in Vercel under <strong>Settings → Environment Variables</strong>, then{' '}
-                <strong>redeploy</strong> — these are baked in at build time, so an existing build
+                <strong>redeploy</strong>. These are baked in at build time, so an existing build
                 will not pick them up.
               </>
             ) : (
@@ -65,7 +65,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </ol>
 
         <p className="mt-4 text-xs text-mauve-400">
-          Without step 3 she can sign in and still see nothing — the row-level security policy has
+          Without step 3 she can sign in and still see nothing: the row-level security policy has
           no business to show her.
         </p>
 

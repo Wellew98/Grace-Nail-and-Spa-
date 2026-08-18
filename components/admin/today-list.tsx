@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Swatch } from '@/components/swatch';
+import { VoucherRedeem } from '@/components/admin/voucher-redeem';
 import { cancelAppointmentAction, markStatusAction } from '@/app/admin/actions';
 import { formatZar } from '@/lib/money';
 import { formatPhoneForDisplay, whatsappLink } from '@/lib/phone';
@@ -41,6 +42,7 @@ export function TodayList({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [flash, setFlash] = useState<{ ok: boolean; message: string } | null>(null);
+  const [voucherFor, setVoucherFor] = useState<string | null>(null);
 
   function run(action: () => Promise<{ ok: boolean; message?: string }>) {
     startTransition(async () => {
@@ -190,8 +192,16 @@ export function TodayList({
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => run(() => markStatusAction(appointment.id, 'completed'))}
+                  onClick={() => setVoucherFor(voucherFor === appointment.id ? null : appointment.id)}
                   className="ml-auto rounded-full border border-blush-300 px-3.5 py-2 text-xs hover:bg-blush-100 disabled:opacity-50"
+                >
+                  Voucher
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run(() => markStatusAction(appointment.id, 'completed'))}
+                  className="rounded-full border border-blush-300 px-3.5 py-2 text-xs hover:bg-blush-100 disabled:opacity-50"
                 >
                   Done
                 </button>
@@ -216,6 +226,17 @@ export function TodayList({
                   Cancel
                 </button>
               </div>
+
+              {voucherFor === appointment.id && (
+                <VoucherRedeem
+                  appointmentId={appointment.id}
+                  priceCents={appointment.priceCents}
+                  onRedeemed={() => {
+                    setVoucherFor(null);
+                    router.refresh();
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>

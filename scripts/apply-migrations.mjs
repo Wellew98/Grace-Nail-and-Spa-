@@ -14,23 +14,36 @@
  * provides. Against a real Supabase project it skips that file, because the
  * platform already manages those and recreating them would be wrong.
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { Client } from 'pg';
 
 /**
- * Applied always. These are the same files Supabase's GitHub integration
- * applies on merge to the production branch, so running this script and merging
- * produce the same database.
+ * Applied always: EVERY file in supabase/migrations, in name order.
+ *
+ * ---------------------------------------------------------------------------
+ * READ FROM THE DIRECTORY, NOT FROM A LIST HERE.
+ *
+ * This used to be a hand-written array, and it drifted — it still ended at
+ * 0004 once 0005 (the assistant's rate limiter) and 0006 (the real menu) had
+ * landed, so `npm run db:migrate` quietly produced a database missing tables
+ * the running code needs. Nothing failed at migrate time; it failed later, in
+ * the feature, on a developer's machine only.
+ *
+ * Supabase's GitHub integration applies the whole directory on merge. Reading
+ * the directory here is what makes this script and that merge produce the same
+ * database, which is the entire promise of the script — and a new migration
+ * now needs no edit here at all.
+ *
+ * That includes 0004's placeholder menu and therapists, deliberately: they let
+ * the site be shown before the real ones arrive, the site shows a "Sample menu"
+ * banner for as long as those rows exist, and `npm run db:demo-clear` removes
+ * them. Supabase applies that file on merge too.
+ * ---------------------------------------------------------------------------
  */
-const MIGRATIONS = [
-  'supabase/migrations/0001_init.sql',
-  'supabase/migrations/0002_rls.sql',
-  'supabase/migrations/0003_business.sql',
-  // Placeholder menu and therapists, so the site can be shown before the real
-  // ones arrive. Deploys on purpose, and the site shows a "Sample menu" banner
-  // for as long as these rows exist. Remove with `npm run db:demo-clear`.
-  'supabase/migrations/0004_demo_data.sql',
-];
+const MIGRATIONS = readdirSync('supabase/migrations')
+  .filter((file) => file.endsWith('.sql'))
+  .sort()
+  .map((file) => `supabase/migrations/${file}`);
 
 /**
  * Applied ONLY with --with-sample-data.
