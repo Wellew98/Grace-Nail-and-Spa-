@@ -83,8 +83,8 @@ export default async function GalleryPage() {
           The studio
         </h2>
         <p className="mt-3 max-w-lg text-[0.95rem] leading-relaxed text-mauve-500">
-          You will find us on Amanda Avenue in Glenanda. Two manicure stations, a treatment room
-          behind, and the kettle on.
+          You will find us on Amanda Avenue in Glenanda. Three manicure stations, a treatment room
+          behind.
         </p>
 
         <div className="mt-7 overflow-hidden rounded-2xl bg-blush-100">
