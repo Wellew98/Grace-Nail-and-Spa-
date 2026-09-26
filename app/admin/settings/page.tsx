@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SettingsManager } from '@/components/admin/settings-manager';
 import { getAllResources, getAllServices, getAllStaff, getBusiness } from '@/lib/public-data';
 import { query } from '@/lib/db';
@@ -26,28 +27,43 @@ export default async function SettingsPage() {
   );
 
   return (
-    <SettingsManager
-      timezone={business.timezone}
-      services={services.map((service) => ({
-        id: service.id,
-        name: service.name,
-        durationMinutes: service.duration_minutes,
-        turnaroundMinutes: service.turnaround_minutes,
-        priceCents: service.price_cents,
-        active: service.active,
-      }))}
-      staff={staff.map((member) => ({ id: member.id, name: member.name, active: member.active }))}
-      resources={resources.map((resource) => ({
-        id: resource.id,
-        name: resource.name,
-        active: resource.active,
-      }))}
-      hours={hours.map((row) => ({
-        staffId: row.staff_id,
-        dayOfWeek: row.day_of_week,
-        startTime: row.start_time.slice(0, 5),
-        endTime: row.end_time.slice(0, 5),
-      }))}
-    />
+    <>
+      <SettingsManager
+        timezone={business.timezone}
+        services={services.map((service) => ({
+          id: service.id,
+          name: service.name,
+          durationMinutes: service.duration_minutes,
+          turnaroundMinutes: service.turnaround_minutes,
+          priceCents: service.price_cents,
+          active: service.active,
+        }))}
+        staff={staff.map((member) => ({ id: member.id, name: member.name, active: member.active }))}
+        resources={resources.map((resource) => ({
+          id: resource.id,
+          name: resource.name,
+          active: resource.active,
+        }))}
+        hours={hours.map((row) => ({
+          staffId: row.staff_id,
+          dayOfWeek: row.day_of_week,
+          startTime: row.start_time.slice(0, 5),
+          endTime: row.end_time.slice(0, 5),
+        }))}
+      />
+
+      <section className="mt-12">
+        <h2 className="font-display text-lg font-semibold text-aubergine-900">Your password</h2>
+        <p className="mt-1 text-sm text-mauve-500">
+          Change the password you sign in with. You will need the current one.
+        </p>
+        <Link
+          href="/admin/update-password"
+          className="mt-3 inline-block rounded-full border border-aubergine-900 px-5 py-2.5 text-sm text-aubergine-900 hover:bg-blush-100"
+        >
+          Change password
+        </Link>
+      </section>
+    </>
   );
 }

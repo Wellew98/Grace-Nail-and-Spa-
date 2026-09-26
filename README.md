@@ -256,6 +256,41 @@ a bug, and it is the single most likely thing to go wrong on first setup.
 The SQL editor runs as a privileged role, so the insert is not blocked by the policy that
 would stop her writing that row herself.
 
+### Forgotten and changed passwords
+
+- **Forgot password?** on `/admin/login` emails a reset link. It lands on `/admin/auth/confirm`,
+  which signs her in and sends her to `/admin/update-password` to choose a new one.
+- **Admin → Setup → Change password** does the same while signed in, and asks for the current
+  password first.
+
+Two Supabase settings have to be right, or the reset email is useless:
+
+1. **Authentication → URL Configuration → Redirect URLs**: add
+   `https://<your-domain>/admin/auth/confirm` (and `http://localhost:3000/admin/auth/confirm` for
+   local work). A redirect that is not on this list is silently replaced with the Site URL, and
+   the link drops her on the home page still not knowing her password.
+2. **Authentication → SMTP Settings**: Supabase's built-in mailer is for testing only and is
+   heavily rate-limited. Point it at the same Gmail account and app password as `GMAIL_USER` /
+   `GMAIL_APP_PASSWORD` (host `smtp.gmail.com`, port 465).
+
+By default the link only works in the browser that asked for it, because it uses PKCE. To make it
+work on any device, for example requested on the laptop and opened on her phone, change
+**Authentication → Email Templates → Reset Password** so the link is:
+
+```
+{{ .SiteURL }}/admin/auth/confirm?token_hash={{ .TokenHash }}&type=recovery
+```
+
+`/admin/auth/confirm` handles both forms.
+
+**Locked out with no working email?** Reset it directly in **SQL Editor**:
+
+```sql
+update auth.users
+set encrypted_password = extensions.crypt('NEW_PASSWORD', extensions.gen_salt('bf'))
+where email = 'her@email';
+```
+
 ### Environment
 
 | Variable | Purpose |
