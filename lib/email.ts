@@ -156,6 +156,41 @@ export async function sendCancellationNotice(appointment: AppointmentDetail): Pr
   );
 }
 
+/**
+ * The customer's copy of a cancellation.
+ *
+ * Deliberately neutral about who did the cancelling, because this same message
+ * covers both: she cancelled from her manage link, or the spa cancelled on her
+ * behalf (a therapist off sick, a diary that has to be rebuilt). Blaming the
+ * wrong party in writing is worse than saying nothing.
+ *
+ * It exists because a cancellation used to notify the owner only. A customer
+ * who tapped "Yes, cancel it" by mistake got no record of it at all, and one
+ * whose appointment the spa had cancelled was never told.
+ */
+export async function sendCustomerCancellation(appointment: AppointmentDetail): Promise<void> {
+  await deliver(
+    'customer cancellation',
+    appointment,
+    appointment.customer_email,
+    `Your booking at ${appointment.business_name} is cancelled`,
+    layout(
+      'Your booking is cancelled',
+      `${detailRows(appointment)}
+       <p style="margin:20px 0 0;font-size:14px;line-height:1.6">
+         Nothing further is needed from you. The time has been released, so you can
+         <a href="${SITE_URL}/book" style="color:#c2185b">pick another one</a> whenever you like.
+       </p>
+       <p style="margin:12px 0 0;font-size:14px;line-height:1.6">
+         If you paid with a voucher, its balance has been put back.
+       </p>
+       <p style="margin:16px 0 0;font-size:12px;color:#9b7f94">
+         ${escapeHtml(appointment.business_name)} · ${escapeHtml(formatPhoneForDisplay(appointment.business_phone))}
+       </p>`,
+    ),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Vouchers — spa-voucher-build-spec.md §6.1.
 // ---------------------------------------------------------------------------

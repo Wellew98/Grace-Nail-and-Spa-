@@ -1,6 +1,6 @@
 import { NextResponse, after } from 'next/server';
 import { cancelBooking, getAppointmentByToken } from '@/lib/booking';
-import { sendCancellationNotice } from '@/lib/email';
+import { sendCancellationNotice, sendCustomerCancellation } from '@/lib/email';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,9 +29,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ to
   }
 
   // After the response: the customer has cancelled and should see that
-  // immediately, whatever the mail server is doing.
+  // immediately, whatever the mail server is doing. She gets a copy too — this
+  // is the only record she will have that the slot was released.
   after(async () => {
-    await sendCancellationNotice(appointment);
+    await Promise.all([sendCancellationNotice(appointment), sendCustomerCancellation(appointment)]);
   });
   return NextResponse.json({ ok: true });
 }

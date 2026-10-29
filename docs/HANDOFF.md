@@ -483,6 +483,18 @@ This is not legal advice. It is the set of things that are obviously right and c
 
 ## 12. Transactional email — why it is not Resend (yet)
 
+> **Superseded, October 2026 — Resend is now live.** The spa bought
+> `gracenailsandbeautyspa.co.za` and verified it in Resend, so the domain this section says
+> does not exist does exist. Production runs `MAIL_TRANSPORT=resend` with
+> `BOOKING_FROM_EMAIL=bookings@gracenailsandbeautyspa.co.za` and owner notifications to
+> `gracenailsandbeautyspa@gmail.com`; nothing in `lib/email.ts` changed, which is the seam
+> working as designed. Supabase Auth points at the same Resend account over SMTP
+> (`smtp.resend.com:465`, sender `no-reply@gracenailsandbeautyspa.co.za`) so password resets
+> leave from the spa's own domain instead of a personal Gmail address — before that, Supabase
+> was relaying through `wellefp@gmail.com`, and its default mailer only delivers to project
+> team members anyway. **The reasoning below is kept on purpose**: it explains why the Gmail
+> seam still exists in `lib/mail.ts` and what not to do if Resend is ever swapped out.
+
 Clears launch-gate item v2 §1.2. **This is a deliberate deviation from spec §16**, which
 names `RESEND_API_KEY`. Read this before "fixing" it back.
 

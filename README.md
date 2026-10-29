@@ -270,8 +270,21 @@ Two Supabase settings have to be right, or the reset email is useless:
    local work). A redirect that is not on this list is silently replaced with the Site URL, and
    the link drops her on the home page still not knowing her password.
 2. **Authentication → SMTP Settings**: Supabase's built-in mailer is for testing only and is
-   heavily rate-limited. Point it at the same Gmail account and app password as `GMAIL_USER` /
-   `GMAIL_APP_PASSWORD` (host `smtp.gmail.com`, port 465).
+   heavily rate-limited — it only delivers to addresses that are project team members, so a
+   stylist outside that list gets nothing. Turn custom SMTP on and point it at the same Resend
+   account the site sends booking mail from:
+
+   | Field | Value |
+   |---|---|
+   | Sender email | `no-reply@gracenailsandbeautyspa.co.za` |
+   | Sender name | Grace Nails and Beauty Spa |
+   | Host | `smtp.resend.com` |
+   | Port | `465` |
+   | Username | `resend` |
+   | Password | a Resend API key with sending access (`re_…`) |
+
+   The password is write-only — Supabase never shows it again after saving, so keep it in the
+   password manager. Resend has no separate SMTP credential: the API key *is* the password.
 
 By default the link only works in the browser that asked for it, because it uses PKCE. To make it
 work on any device, for example requested on the laptop and opened on her phone, change

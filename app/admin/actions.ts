@@ -6,6 +6,7 @@ import { requireOwner } from '@/lib/supabase/session';
 import {
   cancelBooking,
   createBooking,
+  getAppointmentById,
   markAppointmentStatus,
   rescheduleBooking,
   type ClashSummary,
@@ -27,7 +28,7 @@ import { query, queryOne } from '@/lib/db';
 import { getBusiness } from '@/lib/availability';
 import { zonedToUtc } from '@/lib/time';
 import { formatZar } from '@/lib/money';
-import { sendVoucherIssued } from '@/lib/email';
+import { sendCustomerCancellation, sendVoucherIssued } from '@/lib/email';
 import {
   adjustVoucher,
   getVoucherByCode,
@@ -129,7 +130,18 @@ export async function cancelAppointmentAction(appointmentId: string): Promise<Ac
 
   const result = await cancelBooking({ appointmentId, actor: 'admin' });
   refreshAdmin();
-  return result.ok ? { ok: true, message: 'Booking cancelled.' } : { ok: false, message: result.message };
+
+  if (!result.ok) return { ok: false, message: result.message };
+
+  // The owner already knows — she just pressed the button. The customer does
+  // not, and this is the case that matters most: a therapist off sick means the
+  // spa cancels on her behalf, and before this she found out by turning up.
+  after(async () => {
+    const detail = await getAppointmentById(appointmentId);
+    if (detail) await sendCustomerCancellation(detail);
+  });
+
+  return { ok: true, message: 'Booking cancelled.' };
 }
 
 // ------------------------------------------------------------------- walk-ins
