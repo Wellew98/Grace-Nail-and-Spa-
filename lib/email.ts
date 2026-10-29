@@ -69,14 +69,30 @@ function layout(heading: string, body: string): string {
   </div></body></html>`;
 }
 
-function detailRows(appointment: AppointmentDetail): string {
+/**
+ * `movedFrom` is set only for a moved booking. It adds a "Was" row so the
+ * customer can see both times in one message, and it is what makes the
+ * difference between a move and a fresh booking legible at a glance.
+ */
+function detailRows(appointment: AppointmentDetail, movedFrom?: Date | null): string {
   const when = formatDateTimeLabel(new Date(appointment.starts_at), appointment.business_timezone);
+  const was = movedFrom ? formatDateTimeLabel(movedFrom, appointment.business_timezone) : null;
   return `
     <table style="width:100%;border-collapse:collapse;font-size:14px">
       <tr><td style="padding:6px 0;color:#7a5a72">Treatment</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.service_name)}</td></tr>
       <tr><td style="padding:6px 0;color:#7a5a72">When</td><td style="padding:6px 0;text-align:right">${escapeHtml(when)}</td></tr>
+      ${was ? `<tr><td style="padding:6px 0;color:#7a5a72">Was</td><td style="padding:6px 0;text-align:right;color:#9b7f94"><s>${escapeHtml(was)}</s></td></tr>` : ''}
       <tr><td style="padding:6px 0;color:#7a5a72">With</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.staff_name)}</td></tr>
       <tr><td style="padding:6px 0;color:#7a5a72">Price</td><td style="padding:6px 0;text-align:right">${formatZar(appointment.price_cents_at_booking)}</td></tr>
+    </table>`;
+}
+
+/** The part of an owner notification the customer never sees. */
+function customerRows(appointment: AppointmentDetail): string {
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px">
+      <tr><td style="padding:6px 0;color:#7a5a72">Customer</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.customer_name)}</td></tr>
+      <tr><td style="padding:6px 0;color:#7a5a72">Phone</td><td style="padding:6px 0;text-align:right">${escapeHtml(formatPhoneForDisplay(appointment.customer_phone))}</td></tr>
     </table>`;
 }
 
@@ -135,13 +151,59 @@ export async function sendOwnerNotification(appointment: AppointmentDetail): Pro
     appointment,
     process.env.OWNER_NOTIFICATION_EMAIL,
     `New booking: ${appointment.service_name}, ${appointment.staff_name}`,
+    layout('New booking', `${detailRows(appointment)}${customerRows(appointment)}`),
+  );
+}
+
+/**
+ * The owner's copy of a move.
+ *
+ * Separate from sendOwnerNotification because "New booking" was misleading:
+ * a move adds nothing to the diary, it relocates something already in it. An
+ * inbox where moved appointments look identical to new ones overstates the
+ * day's work and hides the change the owner may need to act on.
+ */
+export async function sendOwnerReschedule(
+  appointment: AppointmentDetail,
+  previousStartsAt: Date | null,
+): Promise<void> {
+  await deliver(
+    'owner reschedule',
+    appointment,
+    process.env.OWNER_NOTIFICATION_EMAIL,
+    `Moved: ${appointment.service_name}, ${appointment.staff_name}`,
+    layout('Booking moved', `${detailRows(appointment, previousStartsAt)}${customerRows(appointment)}`),
+  );
+}
+
+/**
+ * The customer's copy of a move.
+ *
+ * She already has a "You're booked in" email for the old time. Reusing that
+ * wording for the new one left two identical-looking confirmations in her
+ * inbox with different times and no explanation — the difference only became
+ * apparent on the day. This one says plainly that the booking moved.
+ */
+export async function sendCustomerReschedule(
+  appointment: AppointmentDetail,
+  previousStartsAt: Date | null,
+): Promise<void> {
+  const url = manageUrl(appointment.manage_token);
+  await deliver(
+    'customer reschedule',
+    appointment,
+    appointment.customer_email,
+    `Your booking at ${appointment.business_name} has moved`,
     layout(
-      'New booking',
-      `${detailRows(appointment)}
-       <table style="width:100%;border-collapse:collapse;font-size:14px;margin-top:8px">
-         <tr><td style="padding:6px 0;color:#7a5a72">Customer</td><td style="padding:6px 0;text-align:right">${escapeHtml(appointment.customer_name)}</td></tr>
-         <tr><td style="padding:6px 0;color:#7a5a72">Phone</td><td style="padding:6px 0;text-align:right">${escapeHtml(formatPhoneForDisplay(appointment.customer_phone))}</td></tr>
-       </table>`,
+      `Your booking has moved, ${escapeHtml(appointment.customer_name.split(' ')[0])}`,
+      `${detailRows(appointment, previousStartsAt)}
+       <p style="margin:20px 0 0;font-size:14px;line-height:1.6">
+         This replaces the earlier confirmation. Nothing else has changed, and the
+         <a href="${url}" style="color:#c2185b">manage your booking</a> link in that email still works.
+       </p>
+       <p style="margin:16px 0 0;font-size:12px;color:#9b7f94">
+         ${escapeHtml(appointment.business_name)} · ${escapeHtml(formatPhoneForDisplay(appointment.business_phone))}
+       </p>`,
     ),
   );
 }

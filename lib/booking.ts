@@ -444,7 +444,12 @@ export async function cancelBooking(options: {
 // ---------------------------------------------------------------------------
 
 export type RescheduleResult =
-  | { ok: true; appointment: Appointment; previousId: string }
+  /**
+   * `previousStartsAt` is the time the booking has just been moved OFF.
+   * Callers need it to say "it was 10:00, it is now 10:30" rather than send a
+   * second booking confirmation that reads as if the first never happened.
+   */
+  | { ok: true; appointment: Appointment; previousId: string; previousStartsAt: Date }
   | { ok: false; error: 'not_found' | 'too_late'; message: string }
   | { ok: false; error: 'slot_taken'; slots: Slot[]; clashesWith: ClashSummary[]; message: string };
 
@@ -582,7 +587,12 @@ export async function rescheduleBooking(options: {
       return row;
     });
 
-    return { ok: true, appointment: result, previousId: original.id };
+    return {
+      ok: true,
+      appointment: result,
+      previousId: original.id,
+      previousStartsAt: new Date(original.starts_at),
+    };
   } catch (error) {
     if (isExclusionViolation(error) || error instanceof SlotUnavailable) {
       const tried = attempted as Slot | null;

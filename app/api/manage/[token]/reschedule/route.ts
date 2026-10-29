@@ -2,7 +2,7 @@ import { NextResponse, after } from 'next/server';
 import { z } from 'zod';
 import { getAppointmentById, getAppointmentByToken, rescheduleBooking } from '@/lib/booking';
 import { getActiveStaff, getBusiness } from '@/lib/public-data';
-import { sendCustomerConfirmation, sendOwnerNotification } from '@/lib/email';
+import { sendCustomerReschedule, sendOwnerReschedule } from '@/lib/email';
 import { formatSlotLabel } from '@/lib/time';
 
 export const dynamic = 'force-dynamic';
@@ -77,7 +77,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   if (detail) {
     // After the response, so a slow mailer never delays the new time showing.
     after(async () => {
-      await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+      await Promise.all([
+        sendCustomerReschedule(detail, result.previousStartsAt),
+        sendOwnerReschedule(detail, result.previousStartsAt),
+      ]);
     });
   }
 

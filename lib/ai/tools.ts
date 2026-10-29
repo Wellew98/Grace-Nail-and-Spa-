@@ -685,7 +685,15 @@ export interface ConfirmedBooking {
 }
 
 export type WriteOutcome =
-  | { ok: true; data: Record<string, unknown>; client: BookingAttachment; appointmentId: string; replayed: boolean }
+  | {
+      ok: true;
+      data: Record<string, unknown>;
+      client: BookingAttachment;
+      appointmentId: string;
+      /** Set only by a move: the time the booking came from. */
+      previousStartsAt?: Date;
+      replayed: boolean;
+    }
   | { ok: false; error: string; message: string; client?: ConflictAttachment };
 
 /**
@@ -843,6 +851,7 @@ export async function rescheduleBookingTool(
     data: { moved: true, ...view },
     client: { kind: 'booking', booking: card, justBooked: true },
     appointmentId: result.appointment.id,
+    previousStartsAt: result.previousStartsAt,
     replayed: false,
   };
 }

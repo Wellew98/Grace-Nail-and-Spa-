@@ -1,7 +1,12 @@
 import 'server-only';
 import { getAvailableSlots, getBusiness, getService } from '../availability';
 import { getAppointmentById } from '../booking';
-import { sendCustomerConfirmation, sendOwnerNotification } from '../email';
+import {
+  sendCustomerConfirmation,
+  sendCustomerReschedule,
+  sendOwnerNotification,
+  sendOwnerReschedule,
+} from '../email';
 import { getActiveStaff } from '../public-data';
 import { formatSlotLabel, todayInZone, utcToZonedDate } from '../time';
 import { classifyMessage, REFUSAL, safeError, scrubSecrets } from './safety';
@@ -453,7 +458,7 @@ export async function performWrite(
     });
 
     if (outcome.ok) {
-      if (!outcome.replayed) void sendConfirmationFor(outcome.appointmentId);
+      if (!outcome.replayed) void sendConfirmationFor(outcome.appointmentId, outcome.previousStartsAt);
       return {
         turn: `[The booking was moved in the database. ${describe(outcome.data)} Confirm the new time to the guest and tell them their existing booking link still works.]`,
         attachment: outcome.client,
@@ -486,12 +491,22 @@ function describe(data: Record<string, unknown>): string {
  * booking safely in the database must never be reported as a failure because a
  * mail server had a bad minute. lib/email.ts already never throws into a write
  * path; this catch is belt and braces around the dispatch itself.
+ *
+ * A move gets the move wording, not a second "your booking is confirmed" —
+ * see sendCustomerReschedule. `previousStartsAt` is only present on that path.
  */
-async function sendConfirmationFor(appointmentId: string): Promise<void> {
+async function sendConfirmationFor(
+  appointmentId: string,
+  previousStartsAt?: Date,
+): Promise<void> {
   try {
     const detail = await getAppointmentById(appointmentId);
     if (!detail) return;
-    await Promise.all([sendCustomerConfirmation(detail), sendOwnerNotification(detail)]);
+    await Promise.all(
+      previousStartsAt
+        ? [sendCustomerReschedule(detail, previousStartsAt), sendOwnerReschedule(detail, previousStartsAt)]
+        : [sendCustomerConfirmation(detail), sendOwnerNotification(detail)],
+    );
   } catch (error) {
     console.error('[ai] confirmation email failed', {
       message: error instanceof Error ? error.message : 'unknown error',
