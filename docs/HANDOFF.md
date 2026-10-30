@@ -34,57 +34,43 @@ comments still cite v1 (v1 §5 = v2 §7, v1 §4 = v2 §6, v1 §7.1 = v2 §14, v1
 ### What is live right now
 
 - **Database**: Supabase project `dxweozusaqtymivupswk`, `eu-west-1`. Schema, RLS,
-  business row and placeholder menu all applied.
+  business row and the full 43-treatment poster menu applied.
 - **Real NAP** (§8, byte-for-byte from the Google Business Profile):
   Grace Nails and Beauty Spa · 11 Amanda Ave, Glenanda, Johannesburg, 2091 · 063 352 5374
 - **Hours**: Mon–Sat 09:00–20:00, Sun 09:00–16:00. Confirmed by the owner — the shorter
   Sunday is the real week, not a Women's Day adjustment.
-- **Placeholder menu** (see §4 below): 6 treatments, 3 therapists, 3 resources.
+- **Menu**: the owner's 43-treatment poster menu is live. The six `0004` placeholders are
+  deactivated. On 30 October 2026 she supplied the same poster again; every price matched
+  `0006`, and `0009_confirm_grace_prices.sql` re-asserts them and removes the last three
+  placeholders (`Gel Manicure`, `Express Manicure`, `Acrylic Full Set`) that had reappeared
+  on `/services`.
+- **Placeholder people/rooms**: 3 therapists and 3 resources, still invented.
 
 ---
 
 ## 2. THE ONE THING BLOCKING LAUNCH
 
-**The treatments and therapists in production are invented.**
+**The menu is real; the therapists and treatment lengths are not.**
 
-```
-Gel Manicure      45min R320      Naledi
-Express Manicure  30min R180      Precious
-Acrylic Full Set  90min R480      Zanele
-Pedicure          60min R350
-Gel Pedicure      75min R420
-Classic Facial    45min R380
-```
+The 43 names and prices are the studio's own, and the prices were confirmed again on
+30 October 2026. What is still invented or estimated:
 
-None of this came from the business. It exists so the site could be shown before the real
-list arrived. **Every page currently displays a banner saying so** — see §4.
-
-To finish: get the real treatment names, lengths and prices, the real therapists, and which
-rooms/chairs exist. Enter them in **Admin → Setup**, then run `npm run db:demo-clear`.
-
-**The poster menu is now IN, provisionally** — migration `0006_poster_menu.sql`. The six
-invented treatments above are deactivated; the poster's 43 real services and real prices
-are active in their place, and all 43 were verified bookable against the real availability
-engine (34–43 slots each on a working day).
-
-**It still carries the `dddddddd-` prefix, so the sample banner is still up, and that is
-deliberate.** The names and prices are the studio's own; the DURATIONS are estimates,
-because the poster gives a length for the three massages and nothing else. Over-warning is
-the safe direction — a guessed duration produces appointments that overlap in real life
-while looking correct in the diary.
-
-What is still needed before the banner can come down — see
-`docs/source-material/README.md`:
-
-- **Confirm every duration.** All estimated except the three massages.
-- **Confirm turnaround and the room/chair mapping** (`service_resources`) — currently
-  estimated: pedicures get a chair, anything done lying down gets the treatment room.
-- **Still no therapist names.** All 43 are mapped to all three invented therapists,
-  because a service with no staff row returns zero slots forever and would sit on the
-  menu permanently unbookable.
+- **The therapists.** Naledi, Precious and Zanele are placeholders from `0004`.
+- **Every duration except the three massages.** The poster gives a length only for the
+  Swedish 60, Swedish 30 and feet massage; `0006` supplied estimates for the rest so the
+  availability grid could work at all.
+- **Turnaround and the room/chair mapping** (`service_resources`) — currently estimated:
+  pedicures get a chair, anything done lying down gets the treatment room.
 - **The poster's phone number is +27 83-520-4875**, which is not the 063 352 5374 above.
   Do not swap it in. Ask which is current.
-- **Confirm the poster itself is current** before entering anything.
+
+The rows still carry the `dddddddd-` prefix, so `hasDemoData()` still marks them for the
+assistant. The site-wide banner was removed on the owner's instruction — see §4. What that
+costs is recorded there: a wrong duration still produces appointments that overlap in real
+life while looking correct in the diary.
+
+To finish: confirm the durations, turnaround and room/chair mapping, and the real therapist
+names and hours in **Admin → Setup**.
 
 ---
 
