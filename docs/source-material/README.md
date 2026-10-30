@@ -22,6 +22,13 @@ the sample-menu banner stays up, because the DURATIONS attached to those real
 prices are estimates. All 43 were checked against the real availability engine
 and return slots.
 
+**The prices were confirmed on 30 October 2026.** The owner supplied the same
+poster again. All 43 prices match `0006`, so no price changed; migration
+`0009_confirm_grace_prices.sql` re-asserts them and deactivates the last three
+`0004` placeholder treatments (`Gel Manicure`, `Express Manicure`, `Acrylic Full
+Set`) that had been left active on the live site. The durations are still the
+estimates described below — the poster gives none except the three massages.
+
 The photographs are not referenced by any page yet.
 
 Everything in §"Before any of this goes on the site" is still open, and two
@@ -317,10 +324,14 @@ not authoritative, and not a substitute for asking.
 
 ### 4. Confirm the poster is current
 
+**Confirmed for the menu prices on 30 October 2026.** The owner supplied the
+same 43-item poster again; every price matches `0006` and is re-asserted by
+`0009`. The phone-number question in item 1 is still open, and the durations are
+still unconfirmed.
+
 Menus get reprinted and prices drift. None of these 43 services overlaps with
 the six placeholder treatments in `0004_demo_data.sql`, so there is no ambiguity
-about which set is real once it is confirmed — but confirm it *is* current
-first.
+about which set is real once it is confirmed.
 
 Once all four are answered: enter the services in **Admin → Setup**, then run
 `npm run db:demo-clear`. The sample-data banner disappears on its own when the
